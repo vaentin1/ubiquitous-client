@@ -65,7 +65,7 @@ const params = new URLSearchParams(location.search);
 const DIR = params.get('dir') ?? '';
 const PACKS = (
   params.get('packs') ??
-  'res.bin,res_t.bin,tables.bin,human_selection.bin,human_selection_layer.bin'
+  'res.bin,res_t.bin,tables.bin,human_selection.bin,human_selection_layer.bin,selection.bin,selection_layer.bin'
 )
   .split(',')
   .filter(Boolean);

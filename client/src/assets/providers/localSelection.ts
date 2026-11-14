@@ -1,7 +1,8 @@
 /**
  * The ground the screens before the world stand on: which world it is,
- * which placement in it a character is stood on, and the sky over it.
- * Every build ships it as an ordinary map pack.
+ * which placement in it a character is stood on, and the weather over it.
+ * Every build ships it as an ordinary map pack; what differs is how the
+ * build names it and its stand.
  */
 
 import { TILE_SIZE } from '../formats/tables';
@@ -9,6 +10,9 @@ import type { Placement, SelectionGround, ZoneInfo } from '../types';
 
 /** The ground through 2.2.0, kept wherever its pack still holds tiles. */
 const FIRST_GROUND = 'human_selection';
+
+/** Where 4.2.2 keeps the stand of its selection ground, which nothing is named after. */
+const STAND_FOLDER = 'model/scene/build/login/';
 
 /** Clear ground round a stand that counts as room: about half its width. */
 const ELBOW_ROOM = 8;
@@ -61,6 +65,49 @@ function fileStem(model: string): string {
   return base.replace(/\.[^.]*$/, '');
 }
 
+/** Which way a body on 4.2.2's plinth faces: the plinth's own way, its steps being at its front. */
+export function standFacing(stand: Placement): number {
+  const [, y, , w] = stand.rotation;
+  return 2 * Math.atan2(y, w);
+}
+
+/** The smallest zone on the map whose rectangle holds a point, or none. */
+export function zoneOver(
+  zones: readonly ZoneInfo[],
+  mapId: number,
+  x: number,
+  z: number,
+): ZoneInfo | null {
+  const area = (zone: ZoneInfo): number =>
+    Math.abs((zone.bounds[2] - zone.bounds[0]) * (zone.bounds[3] - zone.bounds[1]));
+  const holding = zones.filter(
+    zone =>
+      zone.mapId === mapId &&
+      x >= Math.min(zone.bounds[0], zone.bounds[2]) &&
+      x <= Math.max(zone.bounds[0], zone.bounds[2]) &&
+      z >= Math.min(zone.bounds[1], zone.bounds[3]) &&
+      z <= Math.max(zone.bounds[1], zone.bounds[3]),
+  );
+  return holding.sort((a, b) => area(a) - area(b))[0] ?? null;
+}
+
+/** The stand nearest the middle of the zone it stands in; none when no zone holds one. */
+export function nearestZoneMiddle(
+  candidates: readonly StandCandidate[],
+  zones: readonly ZoneInfo[],
+  mapId: number,
+): StandCandidate | null {
+  let best: { found: StandCandidate; away: number } | null = null;
+  for (const found of candidates) {
+    const [x, , z] = found.stand.position;
+    const zone = zoneOver(zones, mapId, x, z);
+    if (!zone) continue;
+    const away = Math.hypot(x - zone.centre[0], z - zone.centre[1]);
+    if (!best || away < best.away) best = { found, away };
+  }
+  return best?.found ?? null;
+}
+
 /** The stand with the fewest things crowding it; ties go to the one nearer the middle. */
 export function clearestStand(
   candidates: readonly StandCandidate[],
@@ -88,11 +135,18 @@ function flatApart(one: Placement, other: Placement): number {
 
 /**
  * The ground on one world, from every placement its tiles hold; none when
- * nothing in it is a stand. The stand is named after its world
- * (`human_selection01.bdae`) and looked for within `LOOK_OUT` tiles of the
- * middle of the world's zone (one with scenery first); of the two the one
- * with room round it wins (`clearestStand`), the other being hemmed in by
- * a village.
+ * nothing in it is a stand.
+ *
+ * Through 2.2.0 the stand is named after its world (`human_selection01.bdae`)
+ * and looked for within `LOOK_OUT` tiles of the middle of the world's zone
+ * (one with scenery first); of the two the one with room round it wins
+ * (`clearestStand`), the other being hemmed in by a village. That ground
+ * keeps the screens' own facing and haze.
+ *
+ * 4.2.2 names nothing after its world and keeps the stand in its login
+ * folder; of its two the one nearest the middle of the zone over it
+ * (`nearestZoneMiddle`) is the one ringed by braziers, and the ground
+ * takes that zone's weather and the stand's own facing.
  */
 export function resolveGround(
   world: GroundWorld,
@@ -103,16 +157,38 @@ export function resolveGround(
   const where = world.listed ? { mapId: world.mapId } : { mapId: -1, world: world.stem };
 
   const named = tiles.filter(one => fileStem(one.stand.model).startsWith(world.stem.toLowerCase()));
-  const zone = onMap.find(one => one.hasScenery) ?? onMap[0] ?? null;
-  const middle = zone ? zone.centre : [0, 0];
-  const tx = Math.floor(middle[0] / TILE_SIZE);
-  const tz = Math.floor(middle[1] / TILE_SIZE);
-  const near = named.filter(
-    one => Math.max(Math.abs(one.tile[0] - tx), Math.abs(one.tile[1] - tz)) <= LOOK_OUT,
-  );
-  const found = clearestStand(near, middle);
+  if (named.length) {
+    const zone = onMap.find(one => one.hasScenery) ?? onMap[0] ?? null;
+    const middle = zone ? zone.centre : [0, 0];
+    const tx = Math.floor(middle[0] / TILE_SIZE);
+    const tz = Math.floor(middle[1] / TILE_SIZE);
+    const near = named.filter(
+      one => Math.max(Math.abs(one.tile[0] - tx), Math.abs(one.tile[1] - tz)) <= LOOK_OUT,
+    );
+    const found = clearestStand(near, middle);
+    if (!found) return null;
+    return {
+      ...where,
+      stand: found.stand,
+      tile: found.tile,
+      atmosphere: null,
+      ...groundSky(world.stem, zone),
+    };
+  }
+
+  const filed = tiles.filter(one => one.stand.model.toLowerCase().startsWith(STAND_FOLDER));
+  const found = nearestZoneMiddle(filed, onMap, world.mapId);
   if (!found) return null;
-  return { ...where, stand: found.stand, tile: found.tile, ...groundSky(world.stem, zone) };
+  const [x, , z] = found.stand.position;
+  const zone = zoneOver(onMap, world.mapId, x, z);
+  return {
+    ...where,
+    stand: found.stand,
+    tile: found.tile,
+    facing: standFacing(found.stand),
+    atmosphere: zone?.atmosphere ?? null,
+    ...groundSky(world.stem, zone),
+  };
 }
 
 /** The ground's dome and horizon: its zone's, else the ones named after it. */

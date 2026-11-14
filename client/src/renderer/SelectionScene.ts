@@ -42,6 +42,7 @@ import {
   blendPoses,
   closePose,
   groundHaze,
+  groundLook,
   stepViewProgress,
   turnWide,
   widePose,
@@ -54,10 +55,8 @@ const log = logger('selection');
 
 const MADE_EFFECT = 'Effects/character/buff/character_buff_levelup_01.beff';
 
-/** The map has no row to set its haze, so: the warm grey the sky meets the ground in. */
+/** Where no zone row sets the ground's haze: the warm grey the sky meets the ground in. */
 const HAZE = 0xc9c0b4;
-
-const HAZE_COLOUR = new THREE.Color(HAZE);
 
 const SUN_DIRECTION = new THREE.Vector3(0.45, 0.85, 0.35).normalize();
 
@@ -106,6 +105,10 @@ export class SelectionScene {
   private wanted: SelectionView = 'wide';
   private near = 0;
   private orbit = WIDE_START_HEADING;
+  /** Which way a body on the stand faces: the stand's own way where its ground says so. */
+  private facing = DAIS_FACING;
+  /** The colour the sky meets the ground in: the zone's fog where it has one. */
+  private readonly hazeColour = new THREE.Color(HAZE);
   private waterClock = 0;
   /** Drives itself: the world's frame loop has not started yet. */
   private frameHandle: number | null = null;
@@ -155,6 +158,7 @@ export class SelectionScene {
     }
     if (this.closed) return;
 
+    this.adoptWeather(ground);
     await this.addSky(ground.sky);
     await this.addSky(ground.hill, true);
 
@@ -471,7 +475,7 @@ export class SelectionScene {
       this.body.removeFromParent();
       this.body = null;
     }
-    this.pivot.rotation.y = DAIS_FACING;
+    this.pivot.rotation.y = this.facing;
   }
 
   /** An interrupted extraction can lack this map's pack; say so, since nothing drawn looks broken. */
@@ -634,16 +638,30 @@ export class SelectionScene {
     }
   }
 
+  /** Take the ground's facing and its zone's fog (`groundLook`). */
+  private adoptWeather(ground: SelectionGround): void {
+    const look = groundLook(ground, TILES_OUT * TILE_SIZE);
+    // A ground that leaves the facing to the screens keeps the wide view turning where it is.
+    if (ground.facing !== undefined) {
+      this.facing = look.facing;
+      this.orbit = look.heading;
+      this.frameCamera();
+    }
+    if (!look.fog) return;
+    this.hazeColour.setRGB(...look.fog.colour, THREE.SRGBColorSpace);
+    this.scene.fog = new THREE.Fog(this.hazeColour.getHex(), look.fog.near, look.fog.far);
+  }
+
   /** The zone's dome or horizon layer, in the sky pass, lowered and hazed like the world's (`makeSkyHill`). */
   private async addSky(path: string, hill = false): Promise<void> {
     try {
       const model = await this.resources.model(path);
       if (this.closed) return;
       const built = buildModel(model, this.materials);
-      if (hill) makeSkyHill(built.object, HAZE_COLOUR);
+      if (hill) makeSkyHill(built.object, this.hazeColour);
       else {
         makeSky(built.object);
-        hazeSky(built.object, HAZE_COLOUR, DOME_HAZE);
+        hazeSky(built.object, this.hazeColour, DOME_HAZE);
       }
       this.sky.add(built.object);
       this.owned.push(...built.geometries);
@@ -655,7 +673,7 @@ export class SelectionScene {
 
   /** Settle camera and body on the dais (`selectionFraming`). */
   private frameCamera(): void {
-    this.pivot.rotation.y = DAIS_FACING;
+    this.pivot.rotation.y = this.facing;
     this.camera.updateProjectionMatrix();
     this.moveCamera(0);
   }
@@ -670,7 +688,11 @@ export class SelectionScene {
     this.orbit = turnWide(this.orbit, dt);
     // Called with no time on loads; that must not finish a move.
     this.near = stepViewProgress(this.near, this.wanted === 'close', dt);
-    const pose = blendPoses(widePose(this.stand, this.orbit), closePose(this.stand), this.near);
+    const pose = blendPoses(
+      widePose(this.stand, this.orbit),
+      closePose(this.stand, this.facing),
+      this.near,
+    );
     this.camera.position.copy(pose.eye);
     this.camera.lookAt(pose.target);
   }

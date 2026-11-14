@@ -16,6 +16,7 @@ import {
   blendPoses,
   closePose,
   groundHaze,
+  groundLook,
   stepViewProgress,
   turnWide,
   widePose,
@@ -141,5 +142,41 @@ describe('the haze over the ground before the world loads', () => {
     const haze = groundHaze(4, TILE);
     expect(haze.from).toBeGreaterThan(CLOSE_DISTANCE * 10);
     expect(haze.from).toBeLessThan(haze.to);
+  });
+});
+
+describe('how a resolved ground is looked at', () => {
+  const zoneWeather = {
+    fogColor: [0.37, 0.46, 0.58] as [number, number, number],
+    fogNear: 19.5,
+    fogFar: 159,
+    skybox: 'model/scene/sky/sky05.bdae',
+  };
+
+  it('keeps the screens own facing, start and haze where the ground says nothing', () => {
+    const look = groundLook({ atmosphere: null }, 256);
+    expect(look.facing).toBe(DAIS_FACING);
+    expect(look.heading).toBe(WIDE_START_HEADING);
+    expect(look.fog).toBeNull();
+  });
+
+  it('faces a stand that faces its own way, and first looks out that way', () => {
+    const look = groundLook({ facing: -1.83, atmosphere: zoneWeather }, 256);
+    expect(look.facing).toBe(-1.83);
+    expect(look.heading).toBeCloseTo(-1.83 - WIDE_START_OFFSET);
+  });
+
+  it('wears the zone fog over the stand, out to its own far end', () => {
+    expect(groundLook({ atmosphere: zoneWeather }, 256).fog).toEqual({
+      colour: [0.37, 0.46, 0.58],
+      near: 19.5,
+      far: 159,
+    });
+  });
+
+  it('keeps the haze under a zone that sets no fog', () => {
+    expect(
+      groundLook({ atmosphere: { ...zoneWeather, fogNear: 0, fogFar: 0 } }, 256).fog,
+    ).toBeNull();
   });
 });

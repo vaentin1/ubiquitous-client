@@ -288,6 +288,10 @@ export interface SelectionGround {
   stand: Placement;
   /** The tile the stand is on, to load the ground around. */
   tile: [number, number];
+  /** Which way a body on the stand faces, radians about Y; absent where the stand does not say. */
+  facing?: number;
+  /** The weather of the zone over the stand; null where the build draws none there. */
+  atmosphere: ZoneAtmosphere | null;
   /** The dome and its horizon layer. */
   sky: string;
   hill: string;

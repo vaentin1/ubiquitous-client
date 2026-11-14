@@ -7,6 +7,9 @@
 
 import * as THREE from 'three';
 
+import type { SelectionGround } from '../assets/types';
+import { reachFor } from './ZoneFog';
+
 /** Which way a body on the dais faces, about the vertical axis. */
 export const DAIS_FACING = 0.75;
 
@@ -96,4 +99,37 @@ export function blendPoses(wide: CameraPose, close: CameraPose, progress: number
 export function groundHaze(tilesOut: number, tileSize: number): { from: number; to: number } {
   const to = tilesOut * tileSize;
   return { from: to / 2, to };
+}
+
+/** How a ground is looked at: which way its body faces, the wide view's first heading, and its fog. */
+export interface GroundLook {
+  facing: number;
+  heading: number;
+  /** The zone's fog (sRGB colour), or null to keep the haze of a ground with no zone row. */
+  fog: { colour: [number, number, number]; near: number; far: number } | null;
+}
+
+/**
+ * The look a resolved ground asks for. Own choice: a stand that faces its
+ * own way is first seen from above it looking out the way it faces, since
+ * what stands behind it (4.2.2's statue) fills the view.
+ */
+export function groundLook(
+  ground: Pick<SelectionGround, 'facing' | 'atmosphere'>,
+  reach: number,
+): GroundLook {
+  const own = ground.facing;
+  const weather = ground.atmosphere;
+  const fogless = !weather || (weather.fogNear === 0 && weather.fogFar === 0);
+  return {
+    facing: own ?? DAIS_FACING,
+    heading: own === undefined ? WIDE_START_HEADING : own - WIDE_START_OFFSET,
+    fog: fogless
+      ? null
+      : {
+          colour: weather.fogColor,
+          near: weather.fogNear,
+          far: reachFor(weather.fogNear, weather.fogFar, reach),
+        },
+  };
 }

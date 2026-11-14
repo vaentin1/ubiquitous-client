@@ -1901,18 +1901,27 @@ describe.skipIf(!RES)('the ground the screens before the world stand on', () => 
   /** Every selection-ground piece decodes with geometry; empty groups would look like a scene that never loaded. */
   it('reads and builds every piece of it', async () => {
     const pack = await PackReader.open(await fileSource(RES!), 'res.bin');
-    const pieces = [
-      'model/scene/build/human/human_selection.bdae',
-      'model/scene/build/human/human_selection01.bdae',
-      'model/scene/build/human/human_selection_stone01.bdae',
-      'model/scene/nature/humanselection/humanselection_tree01.bdae',
-      'model/scene/nature/humanselection/human_grass01.bdae',
-      'model/scene/nature/humanselection/human_grass03.bdae',
-      'model/scene/nature/humanselection/human_grass05.bdae',
-      'model/scene/nature/humanselection/human_grass07.bdae',
-      'model/scene/sky/general_sky/humanselection_sky.bdae',
+    // 4.2.2 stands its characters on a plinth in its `selection` world, under its zone's dome.
+    const pieces422 = [
+      'model/scene/build/login/login01.bdae',
+      'model/scene/sky/sky05.bdae',
       'model/scene/sky/general_sky/humanselection_sky_hill.bdae',
     ];
+    const pieces =
+      pack.length === BUILD_422.resEntries
+        ? pieces422
+        : [
+            'model/scene/build/human/human_selection.bdae',
+            'model/scene/build/human/human_selection01.bdae',
+            'model/scene/build/human/human_selection_stone01.bdae',
+            'model/scene/nature/humanselection/humanselection_tree01.bdae',
+            'model/scene/nature/humanselection/human_grass01.bdae',
+            'model/scene/nature/humanselection/human_grass03.bdae',
+            'model/scene/nature/humanselection/human_grass05.bdae',
+            'model/scene/nature/humanselection/human_grass07.bdae',
+            'model/scene/sky/general_sky/humanselection_sky.bdae',
+            'model/scene/sky/general_sky/humanselection_sky_hill.bdae',
+          ];
 
     const materials = new MaterialCache({ texture: async () => null });
     for (const path of pieces) {
@@ -1928,6 +1937,66 @@ describe.skipIf(!RES)('the ground the screens before the world stand on', () => 
         if ((node as THREE.Mesh).isMesh) drawn++;
       });
       expect(drawn, `${path} builds something to draw`).toBeGreaterThan(0);
+    }
+  }, 120_000);
+});
+
+/** The packs a selection ground may live in, beside the ones every ground needs. */
+const GROUND_PACKS = [
+  'res.bin',
+  'tables.bin',
+  'human_selection.bin',
+  'human_selection_layer.bin',
+  'mendel_selection.bin',
+  'mendel_selection_layer.bin',
+  'selection.bin',
+  'selection_layer.bin',
+];
+
+/** Some build's ground pack is beside the others; 4.2.2's is `selection.bin`. */
+const GROUND = findPack('selection.bin') ?? findPack('human_selection.bin');
+
+describe.skipIf(!RES || !TABLES || !GROUND)('the selection ground, asked for by what it is', () => {
+  it('is a world holding a stand the build ships, under a dome it ships', async () => {
+    const provider = new PackAssetProvider();
+    const names = GROUND_PACKS.filter(n => findPack(n));
+    const files = await Promise.all(
+      names.map(async n => new File([await openAsBlob(findPack(n)!)], n)),
+    );
+    await provider.useSource(provider.offer(files).id);
+    const res = await PackReader.open(await fileSource(RES!), 'res.bin');
+    const ground = await provider.load({ kind: 'selectionGround' });
+
+    for (const path of [ground.stand.model, ground.sky, ground.hill]) {
+      expect(res.get(path), `${path} is in res.bin`).toBeTruthy();
+    }
+    const tile = await provider.load({
+      kind: 'tile',
+      mapId: ground.mapId,
+      tx: ground.tile[0],
+      tz: ground.tile[1],
+      ...(ground.world ? { world: ground.world } : {}),
+    });
+    expect(tile.terrain, 'the stand is on ground').toBeTruthy();
+    expect(
+      tile.placements.some(
+        one =>
+          one.model === ground.stand.model &&
+          one.position.every((v, i) => v === ground.stand.position[i]),
+      ),
+      "the stand is one of its tile's own placements",
+    ).toBe(true);
+
+    if (res.length === BUILD_422.resEntries) {
+      // Its human and Mendel grounds are empty packs; map 35's world holds two
+      // login plinths, and the one ringed by braziers is under zone 1544.
+      expect(ground.mapId).toBe(35);
+      expect(ground.stand.model).toBe('model/scene/build/login/login01.bdae');
+      expect(ground.tile).toEqual([20, 1]);
+      expect(ground.atmosphere?.fogFar).toBe(159);
+      expect(ground.sky).toBe('model/scene/sky/sky05.bdae');
+    } else {
+      expect(ground.stand.model).toMatch(/\/human_selection[^/]*\.bdae$/);
     }
   }, 120_000);
 });
