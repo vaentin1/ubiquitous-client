@@ -48,7 +48,7 @@ import {
   SWING_LANDS_AFTER_MS,
 } from '../src/gameplay/combatResults';
 import { drawnRect } from '../src/world/mapArt';
-import { decodeTexture } from '../src/assets/formats/texture';
+import { decodeTexture, isPng } from '../src/assets/formats/texture';
 import { THUMB_SIZE } from '../src/world/minimap';
 import { isPvr, parseHeader } from '../src/assets/formats/pvrtc';
 import { Bdae } from '../src/assets/formats/bdae';
@@ -63,7 +63,12 @@ import { buildModel } from '../src/renderer/ModelFactory';
 import { MaterialCache } from '../src/renderer/MaterialCache';
 import { buildSkinnedModel, toThreeClip } from '../src/renderer/SkinnedModelFactory';
 import { isSkinned } from '../src/renderer/modelSources';
-import { toAnimationData, toModelData, toSkeletonData } from '../src/assets/providers/localModel';
+import {
+  readBdae,
+  toAnimationData,
+  toModelData,
+  toSkeletonData,
+} from '../src/assets/providers/localModel';
 import { toNodeAnimation } from '../src/assets/providers/skeletonWire';
 import { toSurface } from '../src/assets/providers/surface';
 import { UI_SPRITES, UI_SPRITE_NAMES, locateSprite } from '../src/ui/art/uiSprites';
@@ -3384,6 +3389,57 @@ describe.skipIf(!RES || !TABLES)('capes, on every body in every build', () => {
       // Six of the eight playable bodies carry a cape; the elf woman and the
       // undead man have only the bare back.
       expect(caped, build.res).toBe(6);
+    }
+  }, 120_000);
+});
+
+describe.skipIf(!RES)('scenery images, through the index models resolve by', () => {
+  /**
+   * A model keeps a material image only when the synchronous resolver finds
+   * it; one it misses is drawn white. 4.2.2 keeps nearly every scenery image
+   * in `res_t.bin`, so a resolver blind to that pack whitens its world.
+   */
+  it('resolves nearly every image a sample of buildings names, each to a picture', async () => {
+    const names = ['res.bin', 'res_t.bin'].filter(n => findPack(n));
+    const files = await Promise.all(
+      names.map(async n => new File([await openAsBlob(findPack(n)!)], n)),
+    );
+    const lib = await Library.mountPacks(files);
+    await lib.warmTextureIndex();
+    const resolves = (ref: string) => lib.resolveTextureSync(ref) !== null;
+
+    const res = await lib.pack('res.bin');
+    const buildings = res.entries
+      .map(e => e.name)
+      .filter(n => /^model\/scene\/build\/.+\.bdae$/i.test(n) && !/_inside\.bdae$/i.test(n));
+    const sample = buildings.filter((_, i) => i % Math.ceil(buildings.length / 40) === 0);
+    expect(sample.length).toBeGreaterThan(20);
+
+    let named = 0;
+    let resolved = 0;
+    let textured = 0;
+    const found = new Set<string>();
+    for (const path of sample) {
+      const doc = await readBdae(lib, path);
+      for (const group of doc.meshes(true).flatMap(m => m.groups)) {
+        if (!group.texture) continue;
+        named++;
+        if (!resolves(group.texture)) continue;
+        resolved++;
+        found.add(group.texture);
+      }
+      // What the renderer is handed: a resolved name survives into the model.
+      const kept = toModelData(doc, path, resolves).meshes.flatMap(m => m.groups);
+      if (kept.some(g => g.texture)) textured++;
+    }
+    // 4.2.2 measured: 138 of 138 names resolve, and every sampled building keeps one.
+    expect(resolved).toBeGreaterThanOrEqual(named * 0.95);
+    expect(textured).toBeGreaterThanOrEqual(sample.length * 0.9);
+    for (const ref of found) {
+      const { bytes } = await lib.readTexture(ref);
+      if (isPng(bytes)) continue;
+      const { image } = decodeTexture(bytes, 64);
+      expect(image.width, ref).toBeGreaterThan(0);
     }
   }, 120_000);
 });

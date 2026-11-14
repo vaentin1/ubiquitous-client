@@ -525,6 +525,21 @@ describe('PackAssetProvider', () => {
     expect(lib.hasPack('com.apple.FixedZipMetadata.bin')).toBe(false);
   });
 
+  it('finds the textures a game file attached after the first model brings', async () => {
+    // A stored build missing `res_t.bin` warms the index at boot, before the
+    // game file is reattached; models resolve through that index alone.
+    const tga = buildPvr(4, 4, [[0, 0]]);
+    const lib = await Library.mountPacks([new File([buildPack([]) as BlobPart], 'res.bin')]);
+    await lib.warmTextureIndex();
+    expect(lib.resolveTextureSync('texture/tent.tga')).toBeNull();
+
+    await lib.attachIpa(
+      ipaFile({ 'res_t.bin': buildPack([{ name: 'texture/tent.tga', data: tga }]) }),
+    );
+    await lib.warmTextureIndex();
+    expect(lib.resolveTextureSync('texture/tent.tga')).toEqual(['res_t.bin', 'texture/tent.tga']);
+  });
+
   it('takes a renamed .ipa as the game file, by what it holds', async () => {
     // An iPhone greys an .ipa out of the picker, so players rename it to .bin;
     // taken by its name as one extracted pack, no table was ever found.

@@ -136,6 +136,10 @@ export class Library {
   async attachIpa(file: File, onProgress?: ProgressFn): Promise<void> {
     const ipa = await Library.mount(file, onProgress);
     this.ipaFallback = ipa;
+    // An index built before now left out every texture pack only the game
+    // file holds, and models resolve their images through it alone: kept,
+    // a build stored without `res_t.bin` draws 4.2.2's scenery white.
+    this.textureIndex = null;
     const extra = ipa.packNames().filter(n => !this.packs.has(n));
     log.info(`attached ${file.name}: ${extra.length} further packs available`);
   }
