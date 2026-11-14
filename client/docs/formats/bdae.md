@@ -12,14 +12,18 @@ Every `.bdae` in `res.bin` is wrapped in a small ZIP; see
 
 ## Population checked
 
-| Build | Files | With a data area | With geometry | With animation records | With skins             | With morphs |
-| ----- | ----- | ---------------- | ------------- | ---------------------- | ---------------------- | ----------- |
-| 1.1.4 | 6,960 | 2,895            | 2,895         | 4,224                  | 823 skins in 250 files | 43          |
-| 2.2.0 | 9,464 | 3,926            | 3,926         | 5,747                  | 949 skins in 344 files | 46          |
+| Build | Files  | With a data area | With geometry | With animation records | With skins               | With morphs           |
+| ----- | ------ | ---------------- | ------------- | ---------------------- | ------------------------ | --------------------- |
+| 1.1.4 | 6,960  | 2,895            | 2,895         | 4,224                  | 823 skins in 250 files   | 43                    |
+| 2.2.0 | 9,464  | 3,926            | 3,926         | 5,747                  | 949 skins in 344 files   | 46                    |
+| 4.2.2 | 18,808 | 6,109            | 6,109         | 13,139                 | 1,590 skins in 792 files | 48 morphs in 29 files |
 
-`res_t.bin` holds none. File sizes run from 344 bytes to 1,052,732. Every
-check on this page holds in both builds; no layout difference between them
-was found.
+`res_t.bin` holds none. In 1.1.4 and 2.2.0 file sizes run from 344 bytes to
+1,052,732, and every check on this page holds in both, with no layout
+difference between them. 4.2.2 stores the same records in a second, _wide_
+layout, told apart by the header size (80 instead of 60); see
+[The wide layout](#the-wide-layout). Everything below describes the narrow
+layout unless it says otherwise.
 
 A walker that follows every record on this page, from the header down,
 reaches every entry of the relocation table (below) in 15,778 of the 16,424
@@ -592,6 +596,93 @@ rotations: the rotation to apply is their conjugate.
 11,948 ranges in 11,532 files. Values such as −33 occur. A file whose ranges
 cover several clips holds all of them on one timeline.
 
+## The wide layout
+
+Every `.bdae` in 4.2.2's `res.bin` (18,808 files, 408 bytes to 2,712,016)
+uses it, and no file of the older builds does. The records, their order and
+what each field means are the narrow ones; what changes is how big a pointer
+is and what a link counts from:
+
+- **Strings and data blocks are reached by 8-byte pointers** from the file
+  start, 8-aligned, the high word 0. These, and only these, are in the
+  relocation table, whose entries are 8-byte offsets too.
+- **Every link from one record to another is an `i32` counted from its own
+  field**, like the source table's offsets: list pointers, a geometry's
+  data, a mesh's vertex format, a controller's data, an instance's data, a
+  parameter's value and the surface it leads to, and the animation store,
+  segment and source table. 0 is none. None of them is in the relocation
+  table. So a list is still 8 bytes: `u32` count, `i32` link.
+- A record holding an 8-byte pointer grows to fit it, so most record sizes
+  and offsets change (table below). A `list<str>` holds 8-byte entries, and
+  so does a morph's `targetIndices`; other `list<u32>` and `list<f32>`
+  entries stay 4 bytes.
+
+Checked by reading every 4.2.2 model with the client's reader: every field
+read as an 8-byte pointer sits at a relocated offset and every link field
+does not; vertex and index blocks start with tag 1; every vertex lies within
+its mesh's bounds and every normal is unit length; each skin's source names
+a geometry of the same vertex count; morph target names agree with their
+indices; channel kind 14's member is below its morph's target count; and the
+source table holds two sources per sampler.
+
+### Header (80 bytes)
+
+| Offset | Type    | Field           | Notes                                      |
+| ------ | ------- | --------------- | ------------------------------------------ |
+| 0      | 4 bytes | signature       | ASCII `BRES`                               |
+| 4      | `u16`   | endianMark      | `0xFFFE`                                   |
+| 6      | `u16`   | version         | 0                                          |
+| 8      | `u32`   | headerSize      | 80 in every file                           |
+| 12     | `u32`   | fileSize        | equals the file's length                   |
+| 16     | `u32`   | relocationCount | 6 to 6,165                                 |
+| 20     | `u32`   | —               | 0                                          |
+| 24     | `u64`   | relocationTable | always 80                                  |
+| 32     | `u64`   | stringTable     | always `80 + 8 × relocationCount`          |
+| 40     | `u64`   | modelInfo       |                                            |
+| 48     | `u64`   | modelInfoEnd    | always `modelInfo + 208`                   |
+| 56     | `u64`   | dataArea        | equals fileSize when there is no data area |
+| 64     | `u32`   | dataAreaSize    | `fileSize − dataArea`                      |
+| 68     | `u32`   | dataBlockCount  | 0 when none; up to 386                     |
+| 72     | `u32`   | —               | 0                                          |
+| 76     | `u32`   | —               | 0                                          |
+
+Model info is 208 bytes: `versionText` is an 8-byte pointer at 0, and
+every slot from `timeStart` on sits 20 bytes later than in the narrow
+layout (animation records 56, animation store 68, clip ranges 72, textures
+96, materials 112, geometries 120, controllers 128, node trees 168, scenes
+200). The block table holds 16-byte entries (`u32` size, `u32` 0, `u64`
+block); each block starts 8-aligned. In 5,317 of the 6,109 files
+with a data area the last block ends at the end of the file; past that,
+the data area is not decoded.
+
+### Wide record offsets
+
+The fields the client reads, at their narrow and wide offsets. Fields
+marked _link_ count from their own field in the wide layout.
+
+| Record                   | Narrow size | Wide size | Field: narrow → wide                                                                                                                                      |
+| ------------------------ | ----------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| texture                  | 20          | 40        | id 0 → 0, name 4 → 8, path 8 → 16                                                                                                                         |
+| material                 | 36          | 56        | id 0 → 0, name 4 → 8, effectFile 8 → 16, effectUrl 12 → 24, parameters 16 → 32                                                                            |
+| parameter                | 24          | 32        | name 0 → 0, valueType 8 → 16, value 20 → 28 (_link_, to the value itself)                                                                                 |
+| geometry                 | 16          | 24        | id 0 → 0, name 4 → 8, geometryKind 8 → 16, data 12 → 20 (_link_)                                                                                          |
+| mesh                     | —           | —         | unchanged offsets; vertexFormat at 8 is a _link_                                                                                                          |
+| vertex format            | 44          | 56        | the four lists unchanged at 4, 12, 20, 28; vertexBlock 36 → 40                                                                                            |
+| part                     | 56          | 80        | material 4 → 8, triangleCount 8 → 16, slotMap 12 → 20, indexCount 40 → 48, indexBlock 44 → 56                                                             |
+| controller               | 12          | 24        | controllerKind 0 → 0, id 4 → 8, data 8 → 16 (_link_)                                                                                                      |
+| skin                     | 156         | —         | inverseBinds 4 → 4 (_link_), bindShape 16 → 16, sourceUrl 112 → 112, joints 116 → 120, weightWords 124 → 128, weightBlock 128 → 136, influences 152 → 176 |
+| morph                    | 32          | —         | sourceUrl 0 → 0, targetIds 8 → 12, targetIndices 16 → 20 (8-byte entries), restWeights 24 → 28                                                            |
+| node tree                | 16          | 24        | roots 8 → 16                                                                                                                                              |
+| node                     | 80          | 96        | id 0, name 4 → 8, sid 8 → 16, translation 12 → 24, storedRotation 24 → 36, scale 40 → 52, visible 52 → 64, children 56 → 68, instances 64 → 76            |
+| instance                 | 8           | 8         | instanceKind 0, data 4 (_link_); in the data, url 4 → 8                                                                                                   |
+| animation record         | 32          | 40        | id 0, samplers 4 → 8, channels 12 → 16                                                                                                                    |
+| sampler                  | 28          | 28        | unchanged                                                                                                                                                 |
+| channel                  | 16          | 24        | target 4 → 0, channelKind 8 → 8, detail 12 → 16                                                                                                           |
+| animation store, segment | 8, 24       | —         | segments at store + 4 and sourceTable at segment + 20, both _links_                                                                                       |
+
+The skin's influences at 176 is told by the weight records: with it, every
+skin's `weightWords / (1 + influences)` is its source mesh's vertex count.
+
 ## Matrices and rotations
 
 A `mat4` is sixteen floats. Elements 0–2, 4–6 and 8–10 are a 3 × 3
@@ -671,7 +762,8 @@ The shapes those callers read:
 
 - **Construction.** `new Bdae(payload)` throws `BdaeError` when the payload
   is under 60 bytes, the signature is not `BRES`, the endian mark is not
-  `0xFFFE` or the header size is not 60. Every other problem is tolerated:
+  `0xFFFE`, the header size is neither 60 nor 80, or the file is shorter
+  than its header. Every other problem is tolerated:
   unreadable parts are skipped and noted in a `warnings: string[]`.
   `bytes` is the payload.
 - **`header`**: `{ signature, version, headerSize, fileSize,

@@ -13,37 +13,207 @@ export class BdaeError extends Error {
   }
 }
 
-// — record sizes and model-info slots ---------------------------------------
+// — the two layouts ---------------------------------------------------------------
 
-const HEADER_SIZE = 60;
 const ENDIAN_MARK = 0xfffe;
+const SMALLEST_HEADER = 60;
 
-/** Where each list starts, as an offset from model info. */
-const INFO = {
-  versionText: 0,
-  animationRecords: 36,
-  animationStore: 48,
-  textures: 76,
-  materials: 92,
-  geometries: 100,
-  controllers: 108,
-  nodeTrees: 148,
-} as const;
+/**
+ * Where each field the reader uses sits. The same records come in two
+ * layouts, told apart by the header size: a narrow one with 4-byte pointers
+ * throughout, and a wide one whose string and data-block pointers take 8
+ * bytes, 8-aligned, and whose links from one record to another count from
+ * their own field instead of the file start.
+ */
+interface Layout {
+  header: { size: number; stringTable: number; modelInfo: number; dataArea: number };
+  /** Bytes in a pointer to a string or a data block. */
+  pointer: 4 | 8;
+  /** Links between records count from their own field. */
+  selfRelative: boolean;
+  /** Where each list starts, as an offset from model info. */
+  info: {
+    versionText: number;
+    animationRecords: number;
+    animationStore: number;
+    textures: number;
+    materials: number;
+    geometries: number;
+    controllers: number;
+    nodeTrees: number;
+  };
+  size: {
+    texture: number;
+    material: number;
+    parameter: number;
+    geometry: number;
+    part: number;
+    controller: number;
+    nodeTree: number;
+    node: number;
+    instance: number;
+    animationRecord: number;
+    sampler: number;
+    channel: number;
+  };
+  texture: { name: number; file: number };
+  material: { name: number; file: number; shader: number; parameters: number };
+  parameter: { type: number; value: number };
+  nodeTree: { roots: number };
+  node: {
+    name: number;
+    sid: number;
+    translation: number;
+    rotation: number;
+    scale: number;
+    visible: number;
+    children: number;
+    instances: number;
+  };
+  /** `url` is inside the instance's data. */
+  instance: { data: number; url: number };
+  controller: { id: number; data: number };
+  /** `indexSize` is the bytes in each target index. */
+  morph: { targets: number; indices: number; indexSize: number; weights: number };
+  skin: {
+    binds: number;
+    bindShape: number;
+    source: number;
+    joints: number;
+    weightWords: number;
+    weightBlock: number;
+    influences: number;
+  };
+  geometry: { name: number; kind: number; data: number };
+  vertexFormat: { block: number };
+  part: { material: number; slots: number; indexCount: number; indices: number };
+  animationRecord: { samplers: number; channels: number };
+  channel: { target: number; type: number; detail: number };
+}
 
-const SIZE = {
-  texture: 20,
-  material: 36,
-  parameter: 24,
-  geometry: 16,
-  part: 56,
-  controller: 12,
-  nodeTree: 16,
-  node: 80,
-  instance: 8,
-  animationRecord: 32,
-  sampler: 28,
-  channel: 16,
-} as const;
+const NARROW: Layout = {
+  header: { size: 60, stringTable: 28, modelInfo: 32, dataArea: 40 },
+  pointer: 4,
+  selfRelative: false,
+  info: {
+    versionText: 0,
+    animationRecords: 36,
+    animationStore: 48,
+    textures: 76,
+    materials: 92,
+    geometries: 100,
+    controllers: 108,
+    nodeTrees: 148,
+  },
+  size: {
+    texture: 20,
+    material: 36,
+    parameter: 24,
+    geometry: 16,
+    part: 56,
+    controller: 12,
+    nodeTree: 16,
+    node: 80,
+    instance: 8,
+    animationRecord: 32,
+    sampler: 28,
+    channel: 16,
+  },
+  texture: { name: 4, file: 8 },
+  material: { name: 4, file: 8, shader: 12, parameters: 16 },
+  parameter: { type: 8, value: 20 },
+  nodeTree: { roots: 8 },
+  node: {
+    name: 4,
+    sid: 8,
+    translation: 12,
+    rotation: 24,
+    scale: 40,
+    visible: 52,
+    children: 56,
+    instances: 64,
+  },
+  instance: { data: 4, url: 4 },
+  controller: { id: 4, data: 8 },
+  morph: { targets: 8, indices: 16, indexSize: 4, weights: 24 },
+  skin: {
+    binds: 4,
+    bindShape: 16,
+    source: 112,
+    joints: 116,
+    weightWords: 124,
+    weightBlock: 128,
+    influences: 152,
+  },
+  geometry: { name: 4, kind: 8, data: 12 },
+  vertexFormat: { block: 36 },
+  part: { material: 4, slots: 12, indexCount: 40, indices: 44 },
+  animationRecord: { samplers: 4, channels: 12 },
+  channel: { target: 4, type: 8, detail: 12 },
+};
+
+const WIDE: Layout = {
+  header: { size: 80, stringTable: 32, modelInfo: 40, dataArea: 56 },
+  pointer: 8,
+  selfRelative: true,
+  info: {
+    versionText: 0,
+    animationRecords: 56,
+    animationStore: 68,
+    textures: 96,
+    materials: 112,
+    geometries: 120,
+    controllers: 128,
+    nodeTrees: 168,
+  },
+  size: {
+    texture: 40,
+    material: 56,
+    parameter: 32,
+    geometry: 24,
+    part: 80,
+    controller: 24,
+    nodeTree: 24,
+    node: 96,
+    instance: 8,
+    animationRecord: 40,
+    sampler: 28,
+    channel: 24,
+  },
+  texture: { name: 8, file: 16 },
+  material: { name: 8, file: 16, shader: 24, parameters: 32 },
+  parameter: { type: 16, value: 28 },
+  nodeTree: { roots: 16 },
+  node: {
+    name: 8,
+    sid: 16,
+    translation: 24,
+    rotation: 36,
+    scale: 52,
+    visible: 64,
+    children: 68,
+    instances: 76,
+  },
+  instance: { data: 4, url: 8 },
+  controller: { id: 8, data: 16 },
+  morph: { targets: 12, indices: 20, indexSize: 8, weights: 28 },
+  skin: {
+    binds: 4,
+    bindShape: 16,
+    source: 112,
+    joints: 120,
+    weightWords: 128,
+    weightBlock: 136,
+    influences: 176,
+  },
+  geometry: { name: 8, kind: 16, data: 20 },
+  vertexFormat: { block: 40 },
+  part: { material: 8, slots: 20, indexCount: 48, indices: 56 },
+  animationRecord: { samplers: 8, channels: 16 },
+  channel: { target: 0, type: 8, detail: 16 },
+};
+
+const LAYOUTS = new Map([NARROW, WIDE].map(l => [l.header.size, l]));
 
 const PARAM_SAMPLER_2D = 11;
 
@@ -394,43 +564,71 @@ export class Bdae {
   readonly warnings: string[] = [];
 
   private readonly view: LeView;
+  private readonly layout: Layout;
   private readonly info: number;
   private readonly cache = new Map<string, unknown>();
 
   constructor(readonly bytes: Uint8Array) {
-    if (bytes.byteLength < HEADER_SIZE)
+    if (bytes.byteLength < SMALLEST_HEADER)
       throw new BdaeError(`model file is ${bytes.byteLength} bytes, under a header`);
     this.view = new LeView(bytes);
     const v = this.view;
     if (v.tag(0) !== 'BRES') throw new BdaeError('not a model file: wrong signature');
     if (v.u16(4) !== ENDIAN_MARK) throw new BdaeError('model file is not little-endian');
     const headerSize = v.u32(8);
-    if (headerSize !== HEADER_SIZE) throw new BdaeError(`unexpected header size ${headerSize}`);
-    this.info = v.u32(32);
+    const layout = LAYOUTS.get(headerSize);
+    if (!layout) throw new BdaeError(`unexpected header size ${headerSize}`);
+    if (bytes.byteLength < headerSize)
+      throw new BdaeError(`model file is ${bytes.byteLength} bytes, under a header`);
+    this.layout = layout;
+    const h = layout.header;
+    const at = (field: number): number => {
+      try {
+        return this.ptr(field);
+      } catch (err) {
+        throw new BdaeError(`header field at ${field}: ${message(err)}`);
+      }
+    };
+    this.info = at(h.modelInfo);
     this.header = {
       signature: 'BRES',
       version: v.u16(6),
       headerSize,
       fileSize: v.u32(12),
-      stringTableOffset: v.u32(28),
+      stringTableOffset: at(h.stringTable),
       modelInfoOffset: this.info,
-      modelDataOffset: v.u32(40),
+      modelDataOffset: at(h.dataArea),
     };
   }
 
   // — primitives ----------------------------------------------------------------
 
+  /** A pointer to a string or a data block, from the file start; 0 for none. */
+  private ptr(at: number): number {
+    const low = this.view.u32(at);
+    if (this.layout.pointer === 8 && this.view.u32(at + 4) !== 0)
+      throw new RangeError(`pointer at ${at} reaches past 4 GB`);
+    return low;
+  }
+
+  /** Where a link from one record to another leads; 0 for none. */
+  private ref(at: number): number {
+    if (!this.layout.selfRelative) return this.view.u32(at);
+    const offset = this.view.i32(at);
+    return offset === 0 ? 0 : at + offset;
+  }
+
   /** The text a `str` field points at; '' for a null pointer. */
   private str(at: number): string {
-    const ptr = this.view.u32(at);
+    const ptr = this.ptr(at);
     return ptr === 0 ? '' : this.view.text(ptr);
   }
 
-  /** A count-then-pointer pair: the offset of each of `count` records. */
+  /** A count-then-link pair: the offset of each of `count` records. */
   private list(at: number, size: number): number[] {
     const count = this.view.u32(at);
     if (count === 0) return [];
-    const ptr = this.view.u32(at + 4);
+    const ptr = this.ref(at + 4);
     if (!this.view.fits(ptr, count * size))
       throw new RangeError(`list of ${count} at ${ptr} leaves the file`);
     return Array.from({ length: count }, (_, i) => ptr + i * size);
@@ -441,11 +639,11 @@ export class Bdae {
   }
 
   private strList(at: number): string[] {
-    return this.list(at, 4).map(p => this.str(p));
+    return this.list(at, this.layout.pointer).map(p => this.str(p));
   }
 
-  private infoList(slot: number, size: number): number[] {
-    return this.list(this.info + slot, size);
+  private infoList(slot: keyof Layout['info'], size: keyof Layout['size']): number[] {
+    return this.list(this.info + this.layout.info[slot], this.layout.size[size]);
   }
 
   /**
@@ -489,7 +687,7 @@ export class Bdae {
     return this.once(
       'version',
       () => '',
-      () => this.str(this.info + INFO.versionText),
+      () => this.str(this.info + this.layout.info.versionText),
     );
   }
 
@@ -499,24 +697,26 @@ export class Bdae {
     return this.once(
       'textures',
       () => [],
-      () =>
-        this.each('texture', this.infoList(INFO.textures, SIZE.texture), at => ({
+      () => {
+        const t = this.layout.texture;
+        return this.each('texture', this.infoList('textures', 'texture'), at => ({
           map: this.str(at),
-          mapFriendly: this.str(at + 4),
-          file: this.str(at + 8),
-        })),
+          mapFriendly: this.str(at + t.name),
+          file: this.str(at + t.file),
+        }));
+      },
     );
   }
 
   private parameterOffsets(material: number): number[] {
-    return this.list(material + 16, SIZE.parameter);
+    return this.list(material + this.layout.material.parameters, this.layout.size.parameter);
   }
 
   private materialOffsets(): number[] {
     return this.once(
       'material list',
       () => [],
-      () => this.infoList(INFO.materials, SIZE.material),
+      () => this.infoList('materials', 'material'),
     );
   }
 
@@ -526,24 +726,25 @@ export class Bdae {
       () => [],
       () => {
         const textures = this.textures();
+        const { material: m, parameter: param } = this.layout;
         return this.each('material', this.materialOffsets(), at => {
           let textureIndex: number | null = null;
           let sampled = false;
           let transparent = false;
           for (const p of this.parameterOffsets(at)) {
-            if (this.view.u32(p + 8) !== PARAM_SAMPLER_2D) continue;
+            if (this.view.u32(p + param.type) !== PARAM_SAMPLER_2D) continue;
             if (this.str(p) === TRANSPARENCY_SAMPLER) transparent = true;
             if (sampled) continue;
             sampled = true;
-            const surface = this.view.u32(this.view.u32(p + 20));
+            const surface = this.ref(this.ref(p + param.value));
             const index = this.view.i32(surface);
             textureIndex = index >= 0 ? index : null;
           }
           return {
             name: this.str(at),
-            nameFriendly: this.str(at + 4),
-            file: this.str(at + 8),
-            shader: this.str(at + 12),
+            nameFriendly: this.str(at + m.name),
+            file: this.str(at + m.file),
+            shader: this.str(at + m.shader),
             textureIndex,
             texture: textureIndex !== null ? (textures[textureIndex]?.file ?? null) : null,
             transparent,
@@ -565,11 +766,12 @@ export class Bdae {
     const at = this.materialOffsets()[index];
     if (at === undefined) return [];
     try {
+      const param = this.layout.parameter;
       return this.parameterOffsets(at).map(p => {
-        const raw = this.view.u32(p + 20);
+        const raw = this.ref(p + param.value);
         return {
           name: this.str(p),
-          type: this.view.u32(p + 8),
+          type: this.view.u32(p + param.type),
           raw,
           floats: this.view.fits(raw, 16) ? this.view.floats(raw, 4) : null,
         };
@@ -587,26 +789,31 @@ export class Bdae {
       () => [],
       () => {
         const v = this.view;
+        const { node: n, instance, size } = this.layout;
         const readNode = (at: number, depth: number): NodeRecord => {
           if (depth > 64) throw new RangeError('node tree nests too deep');
           return {
             id: this.str(at),
-            name: this.str(at + 4),
-            sid: this.str(at + 8),
-            translation: v.floats(at + 12, 3),
-            rotation: v.floats(at + 24, 4),
-            scale: v.floats(at + 40, 3),
-            visible: v.u32(at + 52) !== 0,
-            instances: this.list(at + 64, SIZE.instance).map(i => ({
+            name: this.str(at + n.name),
+            sid: this.str(at + n.sid),
+            translation: v.floats(at + n.translation, 3),
+            rotation: v.floats(at + n.rotation, 4),
+            scale: v.floats(at + n.scale, 3),
+            visible: v.u32(at + n.visible) !== 0,
+            instances: this.list(at + n.instances, size.instance).map(i => ({
               type: v.u32(i),
-              url: withoutHash(this.str(v.u32(i + 4) + 4)),
+              url: withoutHash(this.str(this.ref(i + instance.data) + instance.url)),
             })),
-            children: this.each('node', this.list(at + 56, SIZE.node), c => readNode(c, depth + 1)),
+            children: this.each('node', this.list(at + n.children, size.node), c =>
+              readNode(c, depth + 1),
+            ),
           };
         };
         const roots: NodeRecord[] = [];
-        for (const tree of this.infoList(INFO.nodeTrees, SIZE.nodeTree)) {
-          roots.push(...this.each('node', this.list(tree + 8, SIZE.node), at => readNode(at, 0)));
+        const trees = this.infoList('nodeTrees', 'nodeTree');
+        for (const tree of trees) {
+          const nodes = this.list(tree + this.layout.nodeTree.roots, size.node);
+          roots.push(...this.each('node', nodes, at => readNode(at, 0)));
         }
         return roots;
       },
@@ -725,12 +932,14 @@ export class Bdae {
     const all = this.once(
       'controllers',
       () => [] as ControllerRecord[],
-      () =>
-        this.each('controller', this.infoList(INFO.controllers, SIZE.controller), at => ({
+      () => {
+        const c = this.layout.controller;
+        return this.each('controller', this.infoList('controllers', 'controller'), at => ({
           kind: this.view.u32(at),
-          id: this.str(at + 4),
-          data: this.view.u32(at + 8),
-        })),
+          id: this.str(at + c.id),
+          data: this.ref(at + c.data),
+        }));
+      },
     );
     return all.filter(c => c.kind === kind);
   }
@@ -741,15 +950,16 @@ export class Bdae {
       () => [],
       () => {
         const morphs = this.controllers(CONTROLLER_MORPH);
+        const m = this.layout.morph;
         return this.each(
           'morph',
           morphs.map(c => c.data),
           (at, i) => ({
             name: morphs[i].id,
             source: withoutHash(this.str(at)),
-            targets: this.strList(at + 8),
-            indices: this.u32List(at + 16),
-            weights: this.list(at + 24, 4).map(p => this.view.f32(p)),
+            targets: this.strList(at + m.targets),
+            indices: this.list(at + m.indices, m.indexSize).map(p => this.view.u32(p)),
+            weights: this.list(at + m.weights, 4).map(p => this.view.f32(p)),
           }),
         );
       },
@@ -778,12 +988,13 @@ export class Bdae {
 
   private readSkin(id: string, at: number): BdaeSkin {
     const v = this.view;
-    const jointNames = this.strList(at + 116);
-    const binds = v.u32(at + 4);
+    const s = this.layout.skin;
+    const jointNames = this.strList(at + s.joints);
+    const binds = this.ref(at + s.binds);
     const bindPoses = jointNames.map((_, j) => v.floats(binds + j * 64, 16));
-    const influences = v.u32(at + 152);
-    const vertexCount = Math.floor(v.u32(at + 124) / (1 + influences));
-    const block = v.u32(at + 128) + 4;
+    const influences = v.u32(at + s.influences);
+    const vertexCount = Math.floor(v.u32(at + s.weightWords) / (1 + influences));
+    const block = this.ptr(at + s.weightBlock) + 4;
     const record = 4 + 4 * influences;
     const weights: BdaeSkin['weights'] = [];
     for (let i = 0; i < vertexCount; i++) {
@@ -794,10 +1005,10 @@ export class Bdae {
     }
     return {
       name: id,
-      source: this.str(at + 112),
+      source: this.str(at + s.source),
       jointNames,
       bindPoses,
-      bindShape: v.floats(at + 16, 16),
+      bindShape: v.floats(at + s.bindShape, 16),
       maxInfluence: influences,
       vertexCount,
       weights,
@@ -823,33 +1034,35 @@ export class Bdae {
     return this.once(
       'geometries',
       () => [],
-      () =>
-        this.each('geometry', this.infoList(INFO.geometries, SIZE.geometry), at => {
-          const v = this.view;
-          if (v.u32(at + 8) !== GEOMETRY_MESH) return null;
-          const mesh = v.u32(at + 12);
-          const fmt = v.u32(mesh + 8);
+      () => {
+        const v = this.view;
+        const { geometry: geo, vertexFormat, part, size } = this.layout;
+        return this.each('geometry', this.infoList('geometries', 'geometry'), at => {
+          if (v.u32(at + geo.kind) !== GEOMETRY_MESH) return null;
+          const mesh = this.ref(at + geo.data);
+          const fmt = this.ref(mesh + 8);
           return {
             id: this.str(at),
-            name: this.str(at + 4),
+            name: this.str(at + geo.name),
             vertexCount: v.u32(mesh + 4),
             format: {
               stride: v.u32(fmt),
               offsets: this.u32List(fmt + 4),
               elementTypes: this.u32List(fmt + 12),
               components: this.u32List(fmt + 20),
-              data: v.u32(fmt + 36) + 4,
+              data: this.ptr(fmt + vertexFormat.block) + 4,
             },
-            parts: this.list(mesh + 12, SIZE.part).map(p => ({
-              material: this.str(p + 4),
-              slots: Array.from({ length: 16 }, (_, s) => v.u8(p + 12 + s)),
-              indexCount: v.u32(p + 40),
-              indices: v.u32(p + 44) + 4,
+            parts: this.list(mesh + 12, size.part).map(p => ({
+              material: this.str(p + part.material),
+              slots: Array.from({ length: 16 }, (_, s) => v.u8(p + part.slots + s)),
+              indexCount: v.u32(p + part.indexCount),
+              indices: this.ptr(p + part.indices) + 4,
             })),
             boundsMin: v.floats(mesh + 20, 3),
             boundsMax: v.floats(mesh + 32, 3),
           };
-        }),
+        });
+      },
     );
   }
 
@@ -1077,9 +1290,9 @@ export class Bdae {
       () => [],
       () => {
         const v = this.view;
-        const store = v.u32(this.info + INFO.animationStore);
+        const store = this.ref(this.info + this.layout.info.animationStore);
         if (store === 0 || v.u32(store) === 0) return [];
-        const table = v.u32(v.u32(store + 4) + 20);
+        const table = this.ref(this.ref(store + 4) + 20);
         if (table === 0) return [];
         return Array.from({ length: v.u32(table) }, (_, i) => {
           const field = table + 4 + i * 8;
@@ -1120,43 +1333,40 @@ export class Bdae {
       () => {
         const sources = this.sources();
         const v = this.view;
-        return this.each(
-          'animation',
-          this.infoList(INFO.animationRecords, SIZE.animationRecord),
-          at => {
-            const samplers = this.list(at + 4, SIZE.sampler).map(s => {
-              const keyEncoding = v.u32(s + 4);
-              const keySource = v.u32(s + 12);
-              const valueComponents = v.u32(s + 20);
-              const valueSource = v.u32(s + 24);
-              const values = sources[valueSource];
-              return {
-                interpolation: v.u32(s),
-                input: {
-                  type: keyEncoding,
-                  components: v.u32(s + 8),
-                  sourceIndex: keySource,
-                  values: this.keyTimes(keyEncoding, sources[keySource]),
-                },
-                output: {
-                  type: v.u32(s + 16),
-                  components: valueComponents,
-                  sourceIndex: valueSource,
-                  values: values ? v.floats(values.at, values.count * valueComponents) : [],
-                },
-              };
-            });
-            const channels = this.list(at + 12, SIZE.channel).map(c => {
-              const type = v.u32(c + 8);
-              return {
-                target: this.str(c + 4),
-                type,
-                member: type === CHANNEL_MORPH_WEIGHT ? v.u32(c + 12) & 0xff : null,
-              };
-            });
-            return { id: this.str(at), samplers, channels };
-          },
-        );
+        const { animationRecord: rec, channel: ch, size } = this.layout;
+        return this.each('animation', this.infoList('animationRecords', 'animationRecord'), at => {
+          const samplers = this.list(at + rec.samplers, size.sampler).map(s => {
+            const keyEncoding = v.u32(s + 4);
+            const keySource = v.u32(s + 12);
+            const valueComponents = v.u32(s + 20);
+            const valueSource = v.u32(s + 24);
+            const values = sources[valueSource];
+            return {
+              interpolation: v.u32(s),
+              input: {
+                type: keyEncoding,
+                components: v.u32(s + 8),
+                sourceIndex: keySource,
+                values: this.keyTimes(keyEncoding, sources[keySource]),
+              },
+              output: {
+                type: v.u32(s + 16),
+                components: valueComponents,
+                sourceIndex: valueSource,
+                values: values ? v.floats(values.at, values.count * valueComponents) : [],
+              },
+            };
+          });
+          const channels = this.list(at + rec.channels, size.channel).map(c => {
+            const type = v.u32(c + ch.type);
+            return {
+              target: this.str(c + ch.target),
+              type,
+              member: type === CHANNEL_MORPH_WEIGHT ? v.u32(c + ch.detail) & 0xff : null,
+            };
+          });
+          return { id: this.str(at), samplers, channels };
+        });
       },
     );
   }
