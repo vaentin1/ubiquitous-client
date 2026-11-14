@@ -1,8 +1,9 @@
 /** Pack reader (GBMP-stamped ZIP + plain-ZIP .ipas) over ByteSource;
- * central directory up front only; methods 0 (store) and 8 (deflate). */
+ * central directory up front only; methods 0 (store), 8 (deflate) and 14 (LZMA). */
 
 import { type ByteSource, bytesSource, view } from './ByteSource';
 import { inflateRaw } from './inflate';
+import { decodeZipLzma } from './lzma';
 
 export const SIG_LFH_PK = 0x04034b50; // "PK\x03\x04"
 export const SIG_LFH_GBMP = 0x504d4247; // "GBMP"
@@ -18,6 +19,10 @@ const SIZES_AFTER_DATA = 0x0008;
 
 export const METHOD_STORE = 0;
 export const METHOD_DEFLATE = 8;
+export const METHOD_LZMA = 14;
+
+/** General-purpose flag bit 1 on an LZMA member: the stream ends with an end marker. */
+const LZMA_END_MARKER = 0x0002;
 
 export interface PackEntry {
   name: string;
@@ -25,6 +30,10 @@ export interface PackEntry {
   method: number;
   compSize: number;
   size: number;
+  /** CRC-32 of the uncompressed bytes, as the central directory records it. */
+  crc: number;
+  /** General-purpose flags, as the central directory records them. */
+  flags: number;
   isDir: boolean;
 }
 
@@ -93,6 +102,9 @@ export class PackReader {
     const blob = await this.source.read(at, comp);
     if (entry.method === METHOD_STORE) return size ? blob.subarray(0, size) : blob;
     if (entry.method === METHOD_DEFLATE) return inflateRaw(blob, size);
+    if (entry.method === METHOD_LZMA) {
+      return decodeZipLzma(blob, size, (entry.flags & LZMA_END_MARKER) !== 0);
+    }
     throw new PackError(
       `${this.name}: unsupported compression method ${entry.method} for ${entry.name}`,
     );
@@ -143,6 +155,16 @@ export class PackReader {
       >;
       return raw.pipeThrough(inflater);
     }
+    if (entry.method === METHOD_LZMA) {
+      // No streaming LZMA decoder: members using it are small enough to decode whole.
+      const bytes = await this.read(entry);
+      return new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      });
+    }
     throw new PackError(
       `${this.name}: unsupported compression method ${entry.method} for ${entry.name}`,
     );
@@ -180,7 +202,9 @@ export class PackReader {
     for (let i = 0; i < total; i++) {
       if (pos + CD_SIZE > cd.length) break;
       if (dv.getUint32(pos, true) !== SIG_CD) break;
+      const flags = dv.getUint16(pos + 8, true);
       const method = dv.getUint16(pos + 10, true);
+      const crc = dv.getUint32(pos + 16, true);
       const compSize = dv.getUint32(pos + 20, true);
       const size = dv.getUint32(pos + 24, true);
       const fnLen = dv.getUint16(pos + 28, true);
@@ -198,6 +222,8 @@ export class PackReader {
         method,
         compSize,
         size,
+        crc,
+        flags,
         isDir: name.endsWith('/'),
       };
       this.entries.push(entry);
