@@ -255,6 +255,8 @@ const EFFECT_PLACEMENT = 7;
 const EFFECT_FLIGHT = 8;
 const EFFECT_PROJECTILES = 9;
 
+const PARTICLE_FILE = /\.beff$/i;
+
 /** The effect's scale column is a percentage, like `creaturedisplayinfo`'s. */
 const EFFECT_SCALE_PERCENT = 100;
 
@@ -1317,7 +1319,8 @@ export class WorldTables {
     const row = this.keyedRows('c_spellvisualeffect').get(effectId);
     if (!row) return null;
     const pathname = str(row[EFFECT_PATH]);
-    if (!pathname) return null;
+    // 4.2.2 ships a few rows whose path is a placeholder ("Path of 792"), not a file.
+    if (!PARTICLE_FILE.test(pathname)) return null;
     return {
       effectId,
       name: str(row[EFFECT_NAME]),
@@ -1358,7 +1361,7 @@ export class WorldTables {
       castMs: num(row[CAST_TIME_COLUMN]),
       cooldownMs: num(row[COOLDOWN_COLUMN]),
       range: num(row[MAX_RANGE_COLUMN]),
-      mount: num(row[MOUNT_KIND_COLUMN]) > 0,
+      mount: this.isMount(row),
       pet: this.callsPet(row),
       skillSet,
       skillSetIcon: icon && icon !== '0' ? icon : null,
@@ -1394,7 +1397,19 @@ export class WorldTables {
   /** The `mountList` row a spell seats its caster on, from its effect slots; 0 when it summons no mount. */
   spellMountId(spellId: number): number {
     const row = this.keyedRows('spell_new').get(spellId);
-    if (!row) return 0;
+    return row ? this.mountOf(row) : 0;
+  }
+
+  /**
+   * Column 25 alone marks a mount in 1.1.4 and 2.2.0, where every row that
+   * sets it seats its caster; 4.2.2 sets it on pets and other spells too, so
+   * the mount effect has to agree.
+   */
+  private isMount(row: Row): boolean {
+    return num(row[MOUNT_KIND_COLUMN]) > 0 && this.mountOf(row) > 0;
+  }
+
+  private mountOf(row: Row): number {
     const effects = this.keyedRows('spell_effect');
     for (const slot of SPELL_EFFECT_SLOTS) {
       const effect = effects.get(num(row[slot]));
@@ -1507,11 +1522,15 @@ export class WorldTables {
     return icon && icon !== '0' ? icon : null;
   }
 
-  /** Excludes mounts, passives (the never-cast flag) and business skills. */
+  /**
+   * Excludes what column 25 marks (mounts, and in 4.2.2 spells used from
+   * items) unless it calls a pet, passives (the never-cast flag) and
+   * business skills.
+   */
   spellCastable(spellId: number): boolean {
     const row = this.keyedRows('spell_new').get(spellId);
     if (!row) return false;
-    if (num(row[MOUNT_KIND_COLUMN]) > 0) return false;
+    if (num(row[MOUNT_KIND_COLUMN]) > 0 && !this.callsPet(row)) return false;
     if (num(row[SPELL_FLAGS_COLUMN]) & SPELL_NEVER_CAST_FLAG) return false;
     const skillGroup = num(row[SPELL_SKILL_GROUP]);
     if (skillGroup === 0 && this.callsPet(row)) return true;

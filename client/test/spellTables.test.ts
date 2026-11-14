@@ -37,8 +37,9 @@ const visual = buildTable(
 const state = buildTable(
   format(11),
   // 1 caster animation, 2..7 effect per anchor (3 the chest), 8 sound,
-  // 9 shake, 10 clip blend.
-  [row(11, { 1: 70, 3: 30, 8: 4, 9: 6, 10: 2 })],
+  // 9 shake, 10 clip blend. The feet (4) name a row whose path is a
+  // placeholder, as a few 4.2.2 rows' are.
+  [row(11, { 1: 70, 3: 30, 4: 32, 8: 4, 9: 6, 10: 2 })],
   [20],
 );
 const effect = buildTable(
@@ -47,8 +48,9 @@ const effect = buildTable(
   [
     row(10, { 1: 'glow', 2: 'effects/glow.beff', 6: 150, 7: 2 }),
     row(10, { 1: 'bolt', 2: 'effects/bolt.beff', 6: 0, 8: 2, 9: 3 }),
+    row(10, { 1: 'wave', 2: 'Path of 32', 6: 50 }),
   ],
-  [30, 31],
+  [30, 31, 32],
 );
 const animation = buildTable(
   format(4, [1]),
@@ -75,9 +77,21 @@ const spells = buildTable(
       41: 40,
     }),
     row(44, { 1: 3, 10: '0', 43: 0x4 }),
-    row(44, { 1: 3, 25: 1 }),
+    // Column 25 set: a mount, which seats its caster through its effect in
+    // column 33; the same mark with no mount effect (4.2.2 sets it on other
+    // spells); and a pet, which calls its creature.
+    row(44, { 1: 3, 25: 1, 33: 7000 }),
+    row(44, { 1: 3, 25: 12 }),
+    row(44, { 1: 140, 25: 12, 33: 7001 }),
   ],
-  [100, 101, 102],
+  [100, 101, 102, 103, 104],
+);
+const effects = buildTable(
+  format(28),
+  // 6 kind, 7 detail, 11 argument: an aura of detail 50 seats its caster on
+  // mount 12; an instant of detail 8 calls creature 55.
+  [row(28, { 6: 1, 7: 50, 11: 12 }), row(28, { 6: 0, 7: 8, 11: 55 })],
+  [7000, 7001],
 );
 // 0 id, 1 name string, 2 the mark under `class/`.
 const skillSets = buildTable('uus', [[3, 21, 'ui_class_mage_01.png']], [3]);
@@ -94,6 +108,7 @@ const EXTRA = [
   { name: 'tables/c_spellvisualeffect.tbl', data: effect },
   { name: 'tables/c_animationdata.tbl', data: animation },
   { name: 'tables/spell_new.tbl', data: spells },
+  { name: 'tables/spell_effect.tbl', data: effects },
   { name: 'tables/spell_skillset.tbl', data: skillSets },
   { name: 'tables/mountprototype.tbl', data: mounts },
 ];
@@ -178,6 +193,9 @@ describe('spell_new', () => {
       skillSetIcon: null,
     });
     expect(tables.spellStats(102).mount).toBe(true);
+    expect(tables.spellMountId(102)).toBe(12);
+    expect(tables.spellStats(103).mount).toBe(false);
+    expect(tables.spellStats(104)).toMatchObject({ mount: false, pet: true });
   });
 
   it('leaves out never-cast spells and mounts', async () => {
@@ -185,6 +203,8 @@ describe('spell_new', () => {
     expect(tables.spellCastable(100)).toBe(true);
     expect(tables.spellCastable(101)).toBe(false);
     expect(tables.spellCastable(102)).toBe(false);
+    expect(tables.spellCastable(103)).toBe(false);
+    expect(tables.spellCastable(104)).toBe(true);
   });
 });
 
