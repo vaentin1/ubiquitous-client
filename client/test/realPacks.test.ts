@@ -3262,7 +3262,11 @@ describe.skipIf(RES || TABLES || IPA)('game data', () => {
 
 describe.skipIf(!RES)('the interface sprites, found in the user movie', () => {
   it('finds every sprite, on a sheet large enough to cut it from', async () => {
-    const pack = await PackReader.open(await fileSource(RES!), 'res.bin');
+    // A build may keep its interface movies and sheets in `res_t.bin`.
+    const moved = findPack('res_t.bin');
+    const pack = moved
+      ? await PackReader.open(await fileSource(moved), 'res_t.bin')
+      : await PackReader.open(await fileSource(RES!), 'res.bin');
     const parsed = await parseSwf(await pack.read('ui/IGM.swf'));
     const artOf = new Map(parsed.exports.map(e => [e.id, e.name] as const));
     const film = {

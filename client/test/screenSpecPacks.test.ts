@@ -63,6 +63,11 @@ const BUILDS = builds();
  * held to what every build must carry.
  */
 const TARGET = [...BUILDS.keys()].find(build => basename(build) === '1.1.4');
+/**
+ * The build what only later builds carry (`later` in the table) was read
+ * from, and whose numbers its quotes take: 4.2.2.
+ */
+const LATER = [...BUILDS.keys()].find(build => basename(build) === '4.2.2');
 
 interface Read {
   /** Every file name in the build's interface pack, in lower case. */
@@ -96,9 +101,14 @@ beforeAll(async () => {
       if (skin) movies.set(movie, skin);
     }
     const words = await provider.load(uiStringsId()).catch(() => []);
-    const listed = await (await Library.mountPack(file)).pack('res.bin');
+    // Icons are in `res_t.bin` in a build that keeps its interface there.
+    const files = new Set<string>();
+    for (const one of [file, ...tables.filter(table => table.name === 'res_t.bin')]) {
+      const listed = await (await Library.mountPack(one)).pack(one.name);
+      for (const entry of listed.entries) files.add(entry.name.toLowerCase());
+    }
     read.set(build, {
-      files: new Set(listed.entries.map(entry => entry.name.toLowerCase())),
+      files,
       movies,
       words,
       built: buildUiSpec(movies, words, SCREEN_MEANINGS, KNOWN_SCREENS),
@@ -139,6 +149,8 @@ function namesIn(meaning: ScreenMeaning): string[] {
         if (OURS.has(inner)) continue;
         // A piece drawn out of another dialog is held to that dialog below.
         if (inner === 'pieces') continue;
+        // What only later builds carry is held to those builds below.
+        if (inner === 'later') continue;
         // A picture the screen draws itself: the spot is an element, the
         // file is held to the icons the build ships, below.
         if (inner === 'emblems' && held && typeof held === 'object') {
@@ -241,8 +253,11 @@ function quotesIn(value: unknown, all = false): string[] {
   if (value && typeof value === 'object') {
     return Object.entries(value).flatMap(([key, held]) =>
       // Rows found by a word are left out of a build that lacks it, so
-      // only the target build is held to having it.
-      key === 'rowsFrom' && !all ? [] : [...quotesIn(key, all), ...quotesIn(held, all)],
+      // only the target build is held to having it. Words only later
+      // builds carry are held to those builds below.
+      (key === 'rowsFrom' && !all) || key === 'later'
+        ? []
+        : [...quotesIn(key, all), ...quotesIn(held, all)],
     );
   }
   return [];
@@ -291,17 +306,65 @@ describe.skipIf(!BUILDS.size)('the screen table, against the player’s builds',
   it('names only elements some build on disk carries', () => {
     const unknown: string[] = [];
     for (const [screen, meaning] of Object.entries(SCREEN_MEANINGS)) {
+      const harmless = new Set([...(meaning.hidden ?? []), ...(meaning.optional ?? [])]);
       for (const name of namesIn(meaning)) {
         if (name === meaning.dialog) continue;
-        const anywhere = [...read.values()].some(one => {
+        const lacking = [...read.values()].filter(one => {
           const parts = partsOf(one, meaning);
-          return parts !== null && carried(parts, name);
+          return parts === null || !carried(parts, name);
         });
-        if (!anywhere) unknown.push(`${screen}: ${name}`);
+        if (lacking.length < read.size) continue;
+        // The table names what 1.1.4 carries. Without 1.1.4 on disk, a
+        // later build that lacks a name either has no use for it (a part
+        // hidden or optional) or does not draw the screen, saying why.
+        const excused =
+          !TARGET &&
+          lacking.every(one => {
+            if (harmless.has(name)) return true;
+            const why = one.built.fallbacks[screen];
+            return (
+              why?.reason === 'no-dialog' ||
+              (why?.reason === 'missing-part' && why.missing.includes(name))
+            );
+          });
+        if (!excused) unknown.push(`${screen}: ${name}`);
       }
     }
     expect(unknown).toEqual([]);
   }, 60_000);
+
+  it('names what only later builds carry from 4.2.2, and from 1.1.4 never', () => {
+    const wrong: string[] = [];
+    for (const [screen, meaning] of Object.entries(SCREEN_MEANINGS)) {
+      const names = [
+        ...(meaning.later?.hidden ?? []),
+        ...Object.keys(meaning.later?.actions ?? {}),
+      ];
+      for (const name of names) {
+        const carriedIn = (one: Read): boolean => {
+          const parts = partsOf(one, meaning);
+          return parts !== null && carried(parts, name);
+        };
+        if (LATER && !carriedIn(read.get(LATER)!)) wrong.push(`${screen}: ${name} not in 4.2.2`);
+        if (TARGET && carriedIn(read.get(TARGET)!)) wrong.push(`${screen}: ${name} in 1.1.4`);
+      }
+    }
+    expect(wrong).toEqual([]);
+  }, 60_000);
+
+  it.skipIf(!LATER)('quotes what only later builds say by its number in 4.2.2', () => {
+    const words = read.get(LATER!)!.words;
+    const moved: string[] = [];
+    for (const [screen, meaning] of Object.entries(SCREEN_MEANINGS)) {
+      for (const quote of quotesIn({ ...meaning.later }, true)) {
+        const [, at, expected] = /^@(\d+)(?:\?(.+?))?(?:#(\d+))?$/.exec(quote)!;
+        const there = words[Number(at)] ?? '';
+        if (!there || (expected && !quoteAnswers(`@0?${expected}`, [there])))
+          moved.push(`${screen}: ${quote}`);
+      }
+    }
+    expect(moved).toEqual([]);
+  });
 
   it.skipIf(!TARGET)('reads names the movie itself uses, in the inference and in its tests', () => {
     // `dialogShape` looks for these by name, and `dialogShape.test.ts`
@@ -495,6 +558,8 @@ describe.skipIf(!BUILDS.size)('the screen table, against the player’s builds',
   it('names every talent tree the build’s tables list, in every build', () => {
     for (const [build, one] of read) {
       if (!one.trees.length) continue;
+      // A later build without the talent screen says why, elsewhere.
+      if (build !== TARGET && one.built.fallbacks.talents) continue;
       const from = one.built.spec.screens.talents?.rows?.treeWords;
       expect(from, build).toBeDefined();
       if (from === undefined) continue;

@@ -115,8 +115,9 @@ describe.skipIf(!RES)('ui/*.swf, the shipped ones', () => {
     const swf = await parseSwf(await readMovie(packs, 'ui/IGM.swf'));
     // The in-game interface movie is an asset library, not an animation:
     // one frame on the root, hundreds of exports, shapes, sprites and
-    // edit-texts, each wired to interface code by instance name.
-    expect(swf.root.length).toBeLessThanOrEqual(2);
+    // edit-texts, each wired to interface code by instance name. 4.2.2's
+    // root runs to a third frame that places nothing.
+    expect(swf.root.slice(2).flat()).toEqual([]);
     expect(swf.exports.length).toBeGreaterThan(300);
     expect(swf.shapes.length).toBeGreaterThan(500);
     expect(swf.sprites.length).toBeGreaterThan(500);

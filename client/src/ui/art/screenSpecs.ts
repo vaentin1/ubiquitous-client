@@ -64,6 +64,14 @@ export interface ScreenMeaning
    */
   optional?: string[];
   /**
+   * What only builds after 1.1.4 lay out on this screen: parts that are
+   * not this client's to show, and controls and words for what those
+   * builds add. A control is taken only where the movie carries it, so
+   * 1.1.4 is given none of it. These words have no number in 1.1.4, so a
+   * quote here is numbered by the first build that carries it.
+   */
+  later?: Later;
+  /**
    * Where to find the player's purse, where it is not the only one in the
    * dialog; `false` where the screen shows none.
    */
@@ -161,6 +169,30 @@ export type ScreenFallback =
 
 export type ScreenBuilt = { spec: ScreenSpec } | { fallback: ScreenFallback };
 
+/** What a screen gains in builds after 1.1.4; see `ScreenMeaning.later`. */
+export interface Later {
+  hidden?: string[];
+  actions?: Record<string, string>;
+  calls?: Record<string, string>;
+  words?: Record<string, string>;
+}
+
+/** The meaning with what a later build adds folded in, where the movie carries it. */
+function withLater(meaning: ScreenMeaning, parts: readonly PiecePart[]): ScreenMeaning {
+  const later = meaning.later;
+  if (!later) return meaning;
+  const actions = Object.entries(later.actions ?? {}).filter(([control]) =>
+    carries(parts, control),
+  );
+  return {
+    ...meaning,
+    hidden: [...(meaning.hidden ?? []), ...(later.hidden ?? [])],
+    actions: { ...meaning.actions, ...Object.fromEntries(actions) },
+    calls: { ...meaning.calls, ...later.calls },
+    words: { ...meaning.words, ...later.words },
+  };
+}
+
 /** Whether some part is `name`, ends in it, or is one of a numbered run of it. */
 function carries(parts: readonly PiecePart[], name: string): boolean {
   if (!name || name.includes('@')) return true;
@@ -234,11 +266,12 @@ function rowFieldPaths(list: ListingSpec, parts: readonly PiecePart[]): string[]
 export function buildScreenSpec(
   skin: UiSkinData,
   words: readonly string[],
-  meaning: ScreenMeaning,
+  asked: ScreenMeaning,
 ): ScreenBuilt {
-  const plan = planPiece(skin, meaning.dialog, { includeParked: true });
-  if (!plan) return { fallback: { reason: 'no-dialog', dialog: meaning.dialog } };
+  const plan = planPiece(skin, asked.dialog, { includeParked: true });
+  if (!plan) return { fallback: { reason: 'no-dialog', dialog: asked.dialog } };
   const parts = plan.parts;
+  const meaning = withLater(asked, parts);
 
   const optional = new Set(meaning.optional ?? []);
   const missing = namedBy(meaning).filter(
@@ -417,6 +450,7 @@ export function buildScreenSpec(
     bars: _bars,
     toneOf: _toneOf,
     rowsFrom: _rowsFrom,
+    later: _later,
     ...rest
   } = meaning;
   const spec: ScreenSpec = {

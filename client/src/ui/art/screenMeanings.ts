@@ -142,6 +142,7 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
     // The "i" is the build's information button, which is what opens the
     // about page. Remembering keeps the account name, never the password.
     actions: { btnLogin: 'signIn', btnInformation: 'about', btnRemember: 'remember' },
+    optional: ['btnInformation'],
     captions: {
       textAccount: '@302?~294fc75c3a18b018~7',
       textPassword: '@303?~364b5f184af689fc~8',
@@ -170,6 +171,16 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
       'textVersion',
       'textGameName',
     ],
+    // Later builds add news, and signing in through other services.
+    later: {
+      hidden: [
+        'btnnewsbg',
+        'LoginGroupInter',
+        'LoginGroupChina',
+        'btnGameCenter_CN',
+        'textGLLoginHint',
+      ],
+    },
   },
 
   about: {
@@ -203,6 +214,21 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
       'roleinfo/textclass',
       'roleinfo/exp',
     ],
+    // Later builds' membership, renaming, streaming and offers.
+    later: {
+      hidden: [
+        'btnvipicon',
+        'textviplevel',
+        'btnRename',
+        'btntwitch',
+        'btnzhisheng',
+        'textzhisheng',
+        'heikuang',
+        'pluslastlock_new',
+        'pluslastlock_new2',
+        'flameknight',
+      ],
+    },
   },
 
   // Waiting on the server, before the world: the build's "connecting" box.
@@ -265,6 +291,17 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
       'race:3': '@733?~57a30850247af1c4~25',
     },
     hidden: ['btnleft', 'btnright'],
+    // Later builds price a race or a body, and add the Mendels (race 7).
+    later: {
+      hidden: [
+        ...[1, 2, 3, 4, 5].flatMap(n => [`picSelRaceBuytype0${n}`, `txtSelRaceSpendNum0${n}`]),
+        'picSelMaleBuytype',
+        'picSelFemaleBuytype',
+        'txtSelMaleSpendNum',
+        'txtSelFemaleSpendNum',
+      ],
+      words: { 'race:7': '@1672?~4f6eb87efbc9877a~58' },
+    },
   },
 
   class: {
@@ -307,6 +344,13 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
     },
     // In the band across the top, as on the race step.
     captions: { textSelect: '@596?~982ff5d4b9661a20~17' },
+    // Later builds add the Flame Knight, class 5 in their class table.
+    later: {
+      actions: { btnKnight: 'class:5' },
+      calls: { 'class:5': '@2455?~1e5896fd98273c49~12' },
+      words: { 'class:5': '@2454?~d9fa0020d999ae8c~73' },
+      hidden: ['New'],
+    },
   },
 
   look: {
@@ -330,6 +374,21 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
     },
     // A body here has four things to choose; the fifth row is the build's.
     hidden: ['btnFaceFeature', 'FaceFeaturetext'],
+    // Later builds price each change.
+    later: {
+      hidden: [
+        'picSkinColorBuytype',
+        'picHairStyleBuytype',
+        'picHairColorBuytype',
+        'picFaceBuytype',
+        'picFaceFeatureBuytype',
+        'txtSkinColorSpendNum',
+        'txtHairStyleSpendNum',
+        'txtHairColorSpendNum',
+        'txtFaceSpendNum',
+        'txtFaceFeatureSpendNum',
+      ],
+    },
   },
 
   name: {

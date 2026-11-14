@@ -169,6 +169,23 @@ describe('buildScreenSpec', () => {
     expect('spec' in built).toBe(true);
   });
 
+  it('takes a later build’s control only where the movie carries it, and hides its extras', () => {
+    const built = buildScreenSpec(skin(), WORDS, {
+      ...MEANING,
+      actions: { btnFirst: 'first' },
+      later: {
+        actions: { btnThird: 'third', nowhere: 'never' },
+        hidden: ['btnSecond'],
+        calls: { third: 'Third' },
+      },
+    });
+    if (!('spec' in built)) throw new Error(JSON.stringify(built));
+    expect(built.spec.actions).toEqual({ btnFirst: 'first', btnThird: 'third' });
+    expect(built.spec.hidden).toContain('btnSecond');
+    expect(built.spec.calls).toEqual({ third: 'Third' });
+    expect(built.spec).not.toHaveProperty('later');
+  });
+
   it('does not refuse a screen for hiding a part the build lacks', () => {
     expect('spec' in buildScreenSpec(skin(), WORDS, { ...MEANING, hidden: ['nowhere'] })).toBe(
       true,
