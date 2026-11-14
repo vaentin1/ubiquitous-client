@@ -20,6 +20,7 @@ import {
   zoneId,
   zoneIndexId,
   mountListId,
+  generalSpellsId,
   playableKindsId,
   uiIconId,
   lookOptionsId,
@@ -57,6 +58,7 @@ import type {
   UiFaces,
   SkeletonData,
   MountRow,
+  GeneralSpells,
   PlayableKinds,
   LookOptions,
   NetworkAppearance,
@@ -89,6 +91,7 @@ const CACHEABLE: ReadonlySet<ResourceKind> = new Set<ResourceKind>([
   'animation',
   'avatar',
   'mountList',
+  'generalSpells',
   'playableKinds',
   'lookOptions',
   'networkAppearance',
@@ -321,6 +324,10 @@ export class ResourceSystem {
   /** Every rideable mount, from `mountprototype.tbl`. Empty on a build without it. */
   mountList(): Promise<MountRow[]> {
     return this.get(mountListId());
+  }
+
+  generalSpells(): Promise<GeneralSpells> {
+    return this.get(generalSpellsId());
   }
 
   /**

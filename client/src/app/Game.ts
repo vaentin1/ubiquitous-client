@@ -37,7 +37,7 @@ import { clearAllPacks, storageEstimate, whyNoStorage } from '../assets/vfs/Pack
 import { installMultiTouchTap } from '../ui/multiTouchTap';
 import { pickIpa, reopenIpa, storedIpa } from '../assets/vfs/ipaHandle';
 import { avatarLookId, splashId } from '../assets/ids';
-import type { Appearance, TextureData, ZoneInfo } from '../assets/types';
+import type { Appearance, GeneralSpells, TextureData, ZoneInfo } from '../assets/types';
 import { gameYaw, World } from '../world/World';
 import { MINIMAP_ZOOMS, THUMB_SIZE, minimapTextureSize, minimapWindow } from '../world/minimap';
 import { FrameClock, browserPage, workerTicker } from './frameClock';
@@ -80,7 +80,7 @@ import {
   stageProgress,
 } from './helpers/world/zoneLoading';
 import { castTargetFromBar } from './helpers/combat/castSpellFromBar';
-import { SWITCH_TARGET_SPELL, switchTargetPick } from '../gameplay/switchTarget';
+import { switchTargetPick } from '../gameplay/switchTarget';
 import {
   canAttackEntity,
   hasRangedWeaponEquipped,
@@ -301,7 +301,7 @@ import { approachStopDistance } from '../gameplay/approach';
 import { showsOnMap, isInteractable, serviceFor, type Service } from '../gameplay/npcInteraction';
 import { blowStartsFight } from '../gameplay/relationship';
 import { replyToBlow, type PickSeen } from '../gameplay/strikeBack';
-import { DEATH_CLIP, GATHER_HELD_ITEMS, GATHER_SPELL_IDS } from '../gameplay/actionClips';
+import { DEATH_CLIP, gatherHeldItem, isGather } from '../gameplay/actionClips';
 import { guidePlacement, guideTarget } from '../gameplay/questGuide';
 import {
   initSpells,
@@ -514,6 +514,8 @@ export interface GameElements {
 export class Game {
   private readonly canvas: HTMLCanvasElement;
   private readonly resources: ResourceSystem;
+  /** Null until the tables answer; until then no spell is taken for Switch Target or a gather. */
+  private generalSpells: GeneralSpells | null = null;
   private readonly art: UiArt;
   /** The developer's view of the running game; the admin panel and the console both use it. */
   readonly debug: DebugTools;
@@ -1063,6 +1065,12 @@ export class Game {
       // mounted, and they ask only once; answer them now.
       void this.art.loadUiDialogs(wantedDialogs.value);
       this.art.resolveTopbarIcons();
+      void this.resources
+        .generalSpells()
+        .then(spells => {
+          this.generalSpells = spells;
+        })
+        .catch(err => log.warn('general spells unreadable', err));
       this.art.resolveUiSprites();
       const stops = await this.resources.teleportStops();
       // The bag upgrade ladder is local data; a build without the table never offers one.
@@ -2078,7 +2086,7 @@ export class Game {
       onSpellCasting: (casterId, spellId, castTime) => {
         if (this.whoIs.isSelf(casterId)) startCast(spellId, null, castTime);
         else startBodyCast(casterId, spellId, castTime, performance.now());
-        const tool = GATHER_HELD_ITEMS.get(spellId);
+        const tool = gatherHeldItem(this.generalSpells, spellId);
         const body = this.bodyOf(casterId);
         if (tool !== undefined && body !== undefined) void this.renderer.holdItem(body, tool);
         void this.spellVisualFor(spellId).then(visual => {
@@ -2094,7 +2102,7 @@ export class Game {
         } else endBodyCast(casterId);
         // A gather has no release: the loot window kneels the body, and a
         // release clip would stand it back up.
-        if (GATHER_SPELL_IDS.has(spellId)) {
+        if (isGather(this.generalSpells, spellId)) {
           this.combat.stopCast(casterId);
           return;
         }
@@ -2535,8 +2543,9 @@ export class Game {
 
   /** Cast from the bar. Ranks are deduplicated, so an overtaken lower rank is refused here. */
   private castSpell(spellId: number): void {
-    if (spellId === SWITCH_TARGET_SPELL) {
-      this.switchTarget();
+    const switchSpell = this.generalSpells?.switchTarget ?? 0;
+    if (switchSpell !== 0 && spellId === switchSpell) {
+      this.switchTarget(switchSpell);
       return;
     }
     const targetNetworkId = castTargetFromBar({
@@ -3067,12 +3076,12 @@ export class Game {
   }
 
   /** Switch Target is the client's own: it picks a target and the server is told only of that. */
-  private switchTarget(): void {
+  private switchTarget(spellId: number): void {
     const hero = this.world.player;
     if (!hero) return;
-    const reach = spellStats.value.get(SWITCH_TARGET_SPELL)?.range;
+    const reach = spellStats.value.get(spellId)?.range;
     if (reach === undefined) {
-      wantSpellStats([SWITCH_TARGET_SPELL]);
+      wantSpellStats([spellId]);
       return;
     }
     const picked = switchTargetPick(

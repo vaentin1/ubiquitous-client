@@ -473,6 +473,8 @@ export class PackAssetProvider implements AssetProvider {
         return (await this.itemText(target.id)) as ResourceTypes[K];
       case 'mountList':
         return (await this.worldTables()).mounts() as ResourceTypes[K];
+      case 'generalSpells':
+        return (await this.generalSpells()) as ResourceTypes[K];
       case 'playableKinds':
         return (await this.loadPlayableKinds()) as ResourceTypes[K];
       case 'lookOptions':
@@ -725,6 +727,12 @@ export class PackAssetProvider implements AssetProvider {
     if (!nameId) return null;
     const strings = await this.tableString(tables, `String_Spell_${this.opts.language}`);
     return strings.get(nameId) ?? null;
+  }
+
+  /** Found by their English names whatever the interface language, as the server finds them. */
+  async generalSpells(): Promise<ResourceTypes['generalSpells']> {
+    const tables = await this.worldTables();
+    return tables.generalSpells(await this.tableString(tables, 'String_Spell_en'));
   }
 
   /** A quest's text from `String_Quest_<lang>`, by plain string id. */

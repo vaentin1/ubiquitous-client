@@ -36,7 +36,7 @@ import type { Movement, Posture } from '../src/gameplay/ClipMachine';
 import { combatClipName, familyOf, UNARMED } from '../src/gameplay/weaponClips';
 import { heldKind } from '../src/assets/heldKinds';
 import { useOf } from '../src/ui/items';
-import { ACTION_CLIPS, GATHER_HELD_ITEMS } from '../src/gameplay/actionClips';
+import { ACTION_CLIPS, gatherHeldItem } from '../src/gameplay/actionClips';
 import { FIDGET_CLIPS } from '../src/gameplay/idleFidgets';
 import { QUEST_GESTURES } from '../src/gameplay/questGestures';
 import { LOOT_GLOW_EFFECT } from '../src/gameplay/loot';
@@ -1192,8 +1192,10 @@ describe.skipIf(!TABLES)('tables.bin, from the user packs', () => {
       const found = pack.get(entry);
       return found ? pack.read(found) : null;
     });
+    const strings = new FTable(await pack.read(pack.get('tables/String_Spell_en.tbl')!));
+    const { mining } = tables.generalSpells(tables.setStrings('String_Spell_en', strings));
     const look = lookFrom();
-    look.worn.mainHand = GATHER_HELD_ITEMS.get(23)!;
+    look.worn.mainHand = gatherHeldItem({ switchTarget: 0, gathering: [mining], mining }, mining)!;
     const [pick, ...rest] = attachmentsFor(
       look,
       id => tables.keyedRows('itemdisplayinfo').get(id),
@@ -2421,6 +2423,29 @@ describe.skipIf(!TABLES)('spell visuals, in the user tables', () => {
     }
     expect(castable).toBeGreaterThan(100);
     expect(namedViaColumn5 / castable).toBeGreaterThan(0.9);
+  }, 60_000);
+
+  it('finds Switch Target and the gathers by name and by the objects that name them', async () => {
+    const pack = await PackReader.open(await fileSource(TABLES!), 'tables.bin');
+    const tables = await load();
+    const strings = new FTable(await pack.read(pack.get('tables/String_Spell_en.tbl')!));
+    const found = tables.generalSpells(tables.setStrings('String_Spell_en', strings));
+    const resBeside = join(dirname(TABLES!), 'res.bin');
+    const resEntries = existsSync(resBeside)
+      ? (await PackReader.open(await fileSource(resBeside), 'res.bin')).length
+      : 0;
+    // 1.1.4's are the ids its characters were seen to start with.
+    const pinned = is422(tables)
+      ? { switchTarget: 4, gathering: [1, 2, 3], mining: 2 }
+      : pinnedFor(resEntries, {
+          '1.1.4': { switchTarget: 111, gathering: [23, 57, 1822], mining: 23 },
+        });
+    if (pinned) expect(found).toEqual(pinned);
+    expect(found.switchTarget).toBeGreaterThan(0);
+    expect(found.gathering).toContain(found.mining);
+    // Every gather opens an object with its cast, so none is instant.
+    for (const id of found.gathering)
+      expect(tables.spellCastingTime(id), `${id}`).toBeGreaterThan(0);
   }, 60_000);
 
   it('gives every castable spell a rank, and dedupeRanks collapses a shipped chain to its top one', async () => {

@@ -4,7 +4,7 @@
 
 import { logger } from '../../core/log';
 import { FTable, type Row } from './ftable';
-import type { BusLeg, GossipMenu, ItemFacts, SpellStats } from '../types';
+import type { BusLeg, GeneralSpells, GossipMenu, ItemFacts, SpellStats } from '../types';
 import type {
   MountRow,
   PlayableKinds,
@@ -33,6 +33,18 @@ const SO_PROTO_DISPLAY = 3;
 const SO_PROTO_SCALE = 7;
 /** 0 always present, else a `festival.tbl` id; only the active festival's objects show. */
 const SO_PROTO_FESTIVAL = 19;
+/** The spell the object is gathered with, 0 for none. */
+const SO_PROTO_GATHER_SPELL = 12;
+/**
+ * Own choice, the server's too: a gather spell is everyone's when more than one
+ * static-object type in this many names it. In 4.2.2 that is 1, 2 and 3; the
+ * next is named by 7 of 1,113 types.
+ */
+const GATHERING_SHARE_OF_TYPES = 100;
+/** The Bronze ore node: its gather is mining, the spell the server mines with. */
+const ORE_NODE_ENTRY = 132;
+/** The English name of the Switch Target spell. */
+const SWITCH_TARGET_NAME = 'Switch Target';
 
 // --- staticobject_displayinfo: column 1 is the model path, and the row ends
 // in twelve strings, six node names followed by six effect paths — the
@@ -1331,6 +1343,36 @@ export class WorldTables {
       count: Math.max(1, num(row[EFFECT_PROJECTILES])),
       anchor,
     };
+  }
+
+  /**
+   * By their English names and the static objects that name them, the way the
+   * server picks what a new character knows; the lowest id wins a shared name.
+   */
+  generalSpells(englishSpellNames: ReadonlyMap<number, string>): GeneralSpells {
+    let switchTarget = 0;
+    for (const [id, row] of this.keyedRows('spell_new')) {
+      if (switchTarget !== 0 && id >= switchTarget) continue;
+      if (englishSpellNames.get(num(row[SPELL_NAME_STRING])) === SWITCH_TARGET_NAME)
+        switchTarget = id;
+    }
+    const proto = this.rowsOf('staticobject_proto');
+    const namedBy = new Map<number, number>();
+    for (const row of proto) {
+      const spell = num(row[SO_PROTO_GATHER_SPELL]);
+      if (spell > 0) namedBy.set(spell, (namedBy.get(spell) ?? 0) + 1);
+    }
+    const mining = num(
+      this.keyedRows('staticobject_proto').get(ORE_NODE_ENTRY)?.[SO_PROTO_GATHER_SPELL],
+    );
+    // The ore node's own gather counts even where too few types name it to pass the share.
+    const gathering = new Set(
+      [...namedBy]
+        .filter(([, count]) => count * GATHERING_SHARE_OF_TYPES > proto.length)
+        .map(([spell]) => spell),
+    );
+    if (mining > 0) gathering.add(mining);
+    return { switchTarget, gathering: [...gathering].sort((a, b) => a - b), mining };
   }
 
   /** Cast time from `spell_new`: an instant spell with no release row swings through its opening phase. */

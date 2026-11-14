@@ -1,8 +1,5 @@
 /** Switch Target: a spell every class starts with, which the client carries out by picking a target. */
 
-/** `spell_new` row 111 in 1.1.4, named "Switch Target" in the strings. */
-export const SWITCH_TARGET_SPELL = 111;
-
 export interface SwitchCandidate {
   id: number;
   position: readonly [number, number, number];

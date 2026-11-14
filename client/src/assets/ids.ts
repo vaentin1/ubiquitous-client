@@ -41,6 +41,8 @@ export type ResourceId =
   | { readonly kind: 'zoneIndex' }
   /** Every rideable mount, from `mountprototype.tbl`. */
   | { readonly kind: 'mountList' }
+  /** The spells every character carries that the client acts on by itself. */
+  | { readonly kind: 'generalSpells' }
   /** The races and classes a character can be made as. */
   | { readonly kind: 'playableKinds' }
   /** The looks one body offers: its skins, faces, hair styles and colours. */
@@ -218,6 +220,8 @@ export function resourceKey(id: ResourceId): string {
       return 'zoneIndex';
     case 'mountList':
       return 'mountList';
+    case 'generalSpells':
+      return 'generalSpells';
     case 'playableKinds':
       return 'playableKinds';
     case 'lookOptions':
@@ -326,6 +330,7 @@ export function resourceKey(id: ResourceId): string {
 
 export const zoneIndexId = (): IdOf<'zoneIndex'> => ({ kind: 'zoneIndex' });
 export const mountListId = (): IdOf<'mountList'> => ({ kind: 'mountList' });
+export const generalSpellsId = (): IdOf<'generalSpells'> => ({ kind: 'generalSpells' });
 
 export const playableKindsId = (): IdOf<'playableKinds'> => ({ kind: 'playableKinds' });
 

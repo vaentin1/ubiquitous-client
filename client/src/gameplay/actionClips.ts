@@ -5,6 +5,8 @@
  * clips are in `combatResults.ts`.
  */
 
+import type { GeneralSpells } from '../assets/types';
+
 /**
  * Kneeling at an open body: a one-shot crouch that settles into a held one,
  * held for as long as the loot window is up.
@@ -13,17 +15,21 @@ export const LOOT_START_CLIP = 'pickup_start';
 export const LOOT_HOLD_CLIP = 'pickup_hold';
 
 /**
- * The spells that gather from an object: the mine, ordinary and chest rows the
- * user's spell table names "Gather mine", "Gather normal" and "Gather chest".
+ * What a gatherer holds while the gather plays, for show only: it is never
+ * equipped. Mining holds item 13, whose icon is the pick's and whose model is
+ * the miner's dig (the owner's recollection of play). Other gathers hold nothing.
  */
-export const GATHER_SPELL_IDS: ReadonlySet<number> = new Set([23, 57, 1822]);
+export const MINING_HELD_ITEM = 13;
 
-/**
- * What a gatherer holds while the gather plays, by spell, for show only: it is
- * never equipped. Mining holds item 13, whose icon is the pick's and whose model
- * is the miner's dig (the owner's recollection of play).
- */
-export const GATHER_HELD_ITEMS: ReadonlyMap<number, number> = new Map([[23, 13]]);
+/** The item a cast of `spellId` puts in the caster's hand, if it is a gather that shows one. */
+export function gatherHeldItem(spells: GeneralSpells | null, spellId: number): number | undefined {
+  return spells && spells.mining !== 0 && spellId === spells.mining ? MINING_HELD_ITEM : undefined;
+}
+
+/** A gather has no release of its own: the loot window that follows kneels the body. */
+export function isGather(spells: GeneralSpells | null, spellId: number): boolean {
+  return spells !== null && spells.gathering.includes(spellId);
+}
 
 /** The fall a body plays when it dies, and holds as a corpse. */
 export const DEATH_CLIP = 'die_ground';

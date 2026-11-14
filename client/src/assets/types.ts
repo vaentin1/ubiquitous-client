@@ -754,6 +754,19 @@ export interface BusLeg {
   price: number;
 }
 
+/**
+ * The spells every character carries that the client acts on by itself, by
+ * their ids in the build at hand. 0 (or empty) where the build has none.
+ */
+export interface GeneralSpells {
+  /** Carried out on the client, by picking a target. */
+  switchTarget: number;
+  /** Every spell that gathers from a static object; a gather has no release. */
+  gathering: number[];
+  /** The gather an ore node is mined with, which shows the pick in hand. */
+  mining: number;
+}
+
 /** A spell's own figures, from its row in the spell table. Zero where it has none. */
 export interface SpellStats {
   /** What casting it spends, in whichever power the caster's class has. */
@@ -796,6 +809,7 @@ export interface ResourceTypes {
   unitSounds: UnitSounds | null;
   zoneIndex: ZoneIndex;
   mountList: MountRow[];
+  generalSpells: GeneralSpells;
   teleportStops: TeleportStop[];
   storageUpgrades: StorageUpgradeRow[];
   talents: TalentData;
