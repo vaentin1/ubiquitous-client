@@ -41,6 +41,9 @@ function findPack(name: string): string | null {
 }
 
 const RES = findPack('res.bin');
+/** A build may keep its interface movies and icons in `res_t.bin` rather than `res.bin`. */
+const RES_T =
+  RES && existsSync(join(dirname(RES), 'res_t.bin')) ? join(dirname(RES), 'res_t.bin') : null;
 const handles: { close(): Promise<void> }[] = [];
 
 async function fileSource(path: string): Promise<ByteSource> {
@@ -60,6 +63,18 @@ async function fileSource(path: string): Promise<ByteSource> {
 afterAll(async () => {
   await Promise.all(handles.map(h => h.close()));
 });
+
+async function openPacks(): Promise<PackReader[]> {
+  const packs = [await PackReader.open(await fileSource(RES!), 'res.bin')];
+  if (RES_T) packs.push(await PackReader.open(await fileSource(RES_T), 'res_t.bin'));
+  return packs;
+}
+
+async function readMovie(packs: PackReader[], name: string): Promise<Uint8Array> {
+  const pack = packs.find(p => p.has(name));
+  if (!pack) throw new Error(`no pack holds ${name}`);
+  return pack.read(name);
+}
 
 /** Tag codes present anywhere in a movie, without parsing tag bodies. */
 function tagCodes(data: Uint8Array, start: number, end: number, into: Set<number>): void {
@@ -82,9 +97,9 @@ function tagCodes(data: Uint8Array, start: number, end: number, into: Set<number
 
 describe.skipIf(!RES)('ui/*.swf, the shipped ones', () => {
   it('parses all three interface movies', async () => {
-    const pack = await PackReader.open(await fileSource(RES!), 'res.bin');
+    const packs = await openPacks();
     for (const movie of ['ui/IGM.swf', 'ui/LGM.swf', 'ui/store.swf']) {
-      const bytes = await pack.read(movie);
+      const bytes = await readMovie(packs, movie);
       const swf = await parseSwf(bytes);
       expect(swf.version).toBeGreaterThanOrEqual(6);
       expect(swf.width).toBeGreaterThan(0);
@@ -96,8 +111,8 @@ describe.skipIf(!RES)('ui/*.swf, the shipped ones', () => {
   });
 
   it('finds a silk library: hundreds of shapes, sprites and text fields', async () => {
-    const pack = await PackReader.open(await fileSource(RES!), 'res.bin');
-    const swf = await parseSwf(await pack.read('ui/IGM.swf'));
+    const packs = await openPacks();
+    const swf = await parseSwf(await readMovie(packs, 'ui/IGM.swf'));
     // The in-game interface movie is an asset library, not an animation:
     // one frame on the root, hundreds of exports, shapes, sprites and
     // edit-texts, each wired to interface code by instance name.
@@ -114,9 +129,9 @@ describe.skipIf(!RES)('ui/*.swf, the shipped ones', () => {
   });
 
   it('carries no ActionScript: rendering needs no script runtime', async () => {
-    const pack = await PackReader.open(await fileSource(RES!), 'res.bin');
+    const packs = await openPacks();
     for (const movie of ['ui/IGM.swf', 'ui/LGM.swf', 'ui/store.swf']) {
-      const bytes = await pack.read(movie);
+      const bytes = await readMovie(packs, movie);
       expect(bytes[0]).toBe(0x46); // FWS: uncompressed, parseable directly
       const codes = new Set<number>();
       // Body starts past the 8-byte header; CWS would need inflating first.
@@ -128,13 +143,14 @@ describe.skipIf(!RES)('ui/*.swf, the shipped ones', () => {
   });
 
   it('resolves an interface icon to a real PNG', async () => {
-    const pack = await PackReader.open(await fileSource(RES!), 'res.bin');
+    const packs = await openPacks();
     // Pick by position, not by name: the test must not quote the art.
-    const candidate = pack.entries.find(
-      e => e.name.startsWith('ui/icons/') && e.name.endsWith('.png') && !e.name.endsWith('_2X.png'),
-    );
+    const isIcon = (name: string): boolean =>
+      name.startsWith('ui/icons/') && name.endsWith('.png') && !name.endsWith('_2X.png');
+    const pack = packs.find(p => p.entries.some(e => isIcon(e.name)));
+    const candidate = pack?.entries.find(e => isIcon(e.name));
     expect(candidate).toBeDefined();
-    const bytes = await pack.read(candidate!);
+    const bytes = await pack!.read(candidate!);
     // A PNG header carries its own dimensions; pixel decoding belongs to
     // the browser (`decodeTextureBitmap`), which Node has no stand-in for.
     expect(bytes[0]).toBe(0x89);
