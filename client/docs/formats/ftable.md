@@ -62,3 +62,7 @@ located by shape instead of by number:
   three (x, y, z) from 1.1.4 on.
 - `staticobject_displayinfo`: the six node names and six effect paths an
   object carries are the one run of twelve string columns.
+- `spell_talent`: a place's picture is the one string column and its words
+  the column after it; the spells of its five ranks are spread evenly
+  between column 9 and the picture, one column a rank in 1.1.4 and five in
+  4.2.2.

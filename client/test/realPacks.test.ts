@@ -2468,6 +2468,28 @@ describe.skipIf(!TABLES)('spell visuals, in the user tables', () => {
       expect(tables.spellCastingTime(id), `${id}`).toBeGreaterThan(0);
   }, 60_000);
 
+  it('reads every talent place with its picture, its words and a spell for each of its ranks', async () => {
+    const tables = await load();
+    const { places, trees } = tables.talents();
+    expect(places.length).toBeGreaterThan(100);
+    expect(places.every(place => /\.png$/i.test(place.icon))).toBe(true);
+    expect(places.every(place => place.says > 0)).toBe(true);
+    expect(places.every(place => place.spells.length > 0)).toBe(true);
+    // A spell a rank: the rank columns are read at their own places.
+    const full = places.filter(place => place.spells.length === place.ranks);
+    expect(full.length / places.length).toBeGreaterThan(0.95);
+    expect(new Set(places.flatMap(place => place.spells)).size).toBeGreaterThan(places.length);
+    // Each class's trees: those holding places are the ones a class shows.
+    const shown = trees.map(
+      row => row.trees.filter(tree => places.some(place => place.classId === tree)).length,
+    );
+    if (is422(tables)) {
+      expect(trees.map(row => row.classId)).toEqual([1, 2, 3, 4, 5]);
+      expect(shown).toEqual([2, 2, 2, 2, 2]);
+      expect(trees.find(row => row.classId === 5)?.trees.slice(0, 2)).toEqual([133, 134]);
+    }
+  }, 60_000);
+
   it('gives every castable spell a rank, and dedupeRanks collapses a shipped chain to its top one', async () => {
     /*
      * Column 2 is a class's whole ability tree, not one chain; column 6 is the

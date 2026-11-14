@@ -33,13 +33,13 @@ If your `.env` sets `UBIQUITOUS_LAN=1`, Vite refuses to start with
 whole network. Unset one of them for the gallery, or set
 `UBIQUITOUS_LAN_PACKS=1` as well if that is really what you want.
 
-| Parameter                    | What it does                                                                         |
-| ---------------------------- | ------------------------------------------------------------------------------------ |
-| `dir=<folder>`               | The build to draw from. Required.                                                    |
-| `only=<screen>,<screen>`     | Draw just these screens, by the names in `screenMeanings.ts` (`only=mail,mailRead`). |
-| `hero=warrior\|mage\|ranger` | Whose character sheet the character screens show. A mage by default.                 |
-| `open=<screen>`              | Which screen the side menu shows as open. The bag by default.                        |
-| `packs=<file>,<file>`        | Which packs to read from `dir`. `res.bin,tables.bin` by default.                     |
+| Parameter                                  | What it does                                                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `dir=<folder>`                             | The build to draw from. Required.                                                                                    |
+| `only=<screen>,<screen>`                   | Draw just these screens, by the names in `screenMeanings.ts` (`only=mail,mailRead`).                                 |
+| `hero=warrior\|mage\|ranger\|monk\|knight` | Whose character sheet the character screens show, and whose talents the spell book's talent page. A mage by default. |
+| `open=<screen>`                            | Which screen the side menu shows as open. The bag by default.                                                        |
+| `packs=<file>,<file>`                      | Which packs to read from `dir`. `res.bin,tables.bin` by default.                                                     |
 
 ## What is on the page
 

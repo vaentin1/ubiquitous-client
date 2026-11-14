@@ -621,6 +621,21 @@ describe.skipIf(!BUILDS.size)('the screen table, against the player’s builds',
     expect(spec.shown ?? []).not.toContain('btnsort/disable');
   });
 
+  it.skipIf(!LATER)('lays 4.2.2’s talents out on the spell book’s own page, a tier a row', () => {
+    const later = read.get(LATER!)!;
+    expect(later.built.fallbacks.talents?.reason).toBe('no-dialog');
+    const spec = later.built.spec.screens.spells!;
+    expect(spec.panels).toMatchObject({ tree: 'panelTalent/group', window: 'panelTalent/mask' });
+    const parts = partsOf(later, SCREEN_MEANINGS.spells!)!;
+    const places = parts.filter(part => /^panelTalent\/group\/talent\d+$/.test(part.path));
+    expect(places).toHaveLength(24);
+    // Three across and eight down, numbered across: the short side is a tier.
+    expect(new Set(places.map(part => Math.round(part.box.x))).size).toBe(3);
+    expect(new Set(places.map(part => Math.round(part.box.y))).size).toBe(8);
+    const window_ = parts.find(part => part.path === 'panelTalent/mask')!.box;
+    expect(window_.h).toBeLessThan(places.at(-1)!.box.y - places[0]!.box.y);
+  });
+
   it('names every talent tree the build’s tables list, in every build', () => {
     for (const [build, one] of read) {
       if (!one.trees.length) continue;

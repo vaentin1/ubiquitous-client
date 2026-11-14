@@ -409,6 +409,10 @@ export const UNIT_SOUND_STATES = [
 
 export type UnitSoundState = (typeof UNIT_SOUND_STATES)[number];
 
+/** `spell_talent`: the column of a place's first rank's spell, and how many ranks a place has room for. */
+const TALENT_FIRST_SPELL = 9;
+const TALENT_RANKS = 5;
+
 /**
  * `character_race`: the body per sex, then the name id. Checked against the
  * five shipped rows.
@@ -869,10 +873,22 @@ export class WorldTables {
   }
 
   /**
-   * `spell_talent`: grid place, tree, requirements, ranks, the spell each rank
-   * teaches (unused rank columns are 0), picture and words.
+   * `spell_talent`: grid place, tree, requirements, ranks, the spell each of
+   * five ranks teaches (unused rank columns are 0), picture and words. The
+   * picture is the first string column after the ranks and the words follow it; the
+   * five ranks fill what lies between column 9 and the picture, one column
+   * each in 1.1.4 and a run of five each in 4.2.2, the spell first.
    */
   talents(): TalentData {
+    const table = this.tables.get('spell_talent');
+    const icon = table ? table.format.indexOf('s', TALENT_FIRST_SPELL) : -1;
+    const stride = icon > TALENT_FIRST_SPELL ? (icon - TALENT_FIRST_SPELL) / TALENT_RANKS : 0;
+    if (table && !(stride > 0 && Number.isInteger(stride))) {
+      throw new SchemaError(
+        `spell_talent: ${TALENT_RANKS} ranks do not fill the columns before its picture ` +
+          `(format ${JSON.stringify(table.format)})`,
+      );
+    }
     const places = this.rowsOf('spell_talent').map(row => ({
       id: num(row[0]),
       tier: num(row[1]),
@@ -881,9 +897,11 @@ export class WorldTables {
       requires: num(row[4]),
       after: num(row[5]),
       ranks: num(row[8]),
-      spells: [9, 10, 11, 12, 13].map(at => num(row[at])).filter(spell => spell > 0),
-      icon: trim(row[14]),
-      says: num(row[15]),
+      spells: Array.from({ length: TALENT_RANKS }, (_, rank) =>
+        num(row[TALENT_FIRST_SPELL + rank * stride]),
+      ).filter(spell => spell > 0),
+      icon: trim(row[icon]),
+      says: num(row[icon + 1]),
     }));
     // `character_class`: its three trees after its own numbers; 0 for none.
     const trees = this.rowsOf('character_class').map(row => ({

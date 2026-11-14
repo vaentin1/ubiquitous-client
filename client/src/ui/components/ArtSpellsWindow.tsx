@@ -1,26 +1,38 @@
 /**
  * The spell book on the shipped screen: a row per known spell, dragged onto
- * the bar. Tabs: spells, mounts (same rows), and talent trees.
+ * the bar. Tabs: spells, mounts (same rows), and talent trees — the talent
+ * screen where the build has one, else the book's own page of them.
  */
 
 import type { JSX } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 
 import type { PiecePart } from '../art/piecePlan';
+import { screenSpec } from '../art/uiSpec';
 import type { ScreenSpec } from '../art/uiSpec';
 import { INK, LIGHT, useWorn, useWornScreen } from '../art/useWorn';
 import { WornCaptions } from '../art/WornCaptions';
 import { WornEmblem } from '../art/WornEmblem';
-import { perTier } from './ArtTalentTree';
-import { ArtTalentsWindow } from './ArtTalentsWindow';
+import { ArtTalentTree, perTier, placedSockets } from './ArtTalentTree';
+import { ArtTalentsWindow, TALENTS_SCREEN } from './ArtTalentsWindow';
+import { ArtTalentCard } from './ArtTalentCard';
 import { WornStage } from '../art/WornStage';
 import { WornChevrons } from '../art/WornChevrons';
 import { WornRow } from '../art/WornRow';
 import { iconUrl } from '../iconUrl';
-import { listGestures, listSlice, rowsIn, useListScroll } from '../art/wornList';
+import {
+  listGestures,
+  listSlice,
+  rowGestures,
+  rowSlide,
+  rowsIn,
+  useListScroll,
+} from '../art/wornList';
+import { fill } from '../art/wornWords';
 import {
   assignBarSlot,
   castTimeLabel,
+  classTrees,
   getSpellIcon,
   getSpellName,
   getSpellRank,
@@ -39,6 +51,9 @@ import { SPELL_BOOK_PAGES, spellBookPage } from '../../gameplay/spellBookPages';
 import type { SpellBookPage } from '../../gameplay/spellBookPages';
 import { ArtSpellCard } from './ArtSpellCard';
 import type { WhereOnPage } from './ArtTalentCard';
+import { pointsToSpend } from '../../gameplay/talents';
+import { heroClass } from '../hudStore';
+import type { TalentRow } from '../../assets/types';
 
 /** The name every seat on the riding page carries, before its number. */
 const SEAT = /\/rideskillbutton(\d+)$/;
@@ -94,6 +109,9 @@ const PAGE_NAMES: Readonly<Record<SpellBookPage, string>> = {
   none: '',
 };
 
+/** What each side tab of the talent page is called, for anyone who cannot see its mark. */
+const TREE_NAMES = [PAGE_NAMES.treeOne, PAGE_NAMES.treeTwo];
+
 /** Which side tab a known spell is under; one whose row has not come in yet is a life skill. */
 function pageOf(spellId: number): SpellBookPage {
   return spellBookPage(spellStats.value.get(spellId)?.skillSet ?? 1, getSpellName(spellId));
@@ -133,6 +151,23 @@ function Worn({
   const pageTabs = Object.keys(spec.faces ?? {}).filter(control => control.startsWith('btnPage'));
   /** Which of the mount page's own pages: mounts, riding skills, pets. */
   const [side, setSide] = useState(0);
+  /** How far the talent page's tree has slid, in rows, and the place on it being read. */
+  const treeScroll = useListScroll();
+  const [talentRead, setTalentRead] = useState<{ place: TalentRow; at: WhereOnPage } | null>(null);
+  /** The window the talent page's tree shows through, for how tall a row is on screen. */
+  const treeWindow = useRef<HTMLDivElement>(null);
+  /**
+   * The talents on the book's own page, where the build has no talent
+   * screen: the class's trees that have places, a tab down the side each.
+   */
+  const inBook =
+    open === 'talents' &&
+    !screenSpec(TALENTS_SCREEN) &&
+    Boolean(spec.panels?.tree && spec.panels.window);
+  const trees = (classTrees.value.get(heroClass.value) ?? []).filter(tree =>
+    talentPlaces.value.some(place => place.classId === tree),
+  );
+  const treePlaces = talentPlaces.value.filter(place => place.classId === trees[page]);
   const sides = spec.sides ?? [];
   const showing = open === 'mounts' ? (sides[side]?.panel ?? '') : '';
   /**
@@ -208,6 +243,28 @@ function Worn({
   const pageNames = new Set([...tabs, ...sides].map(one => one.panel));
   const upNow = spec.panels?.[open === 'mounts' ? showing : open];
 
+  /** How the talent page's tree slides under its window, measured on the whole screen. */
+  const treeSlideOf = (whole: readonly PiecePart[]) => {
+    const window_ = whole.find(part => part.path === spec.panels?.window);
+    const sockets = placedSockets(whole, spec.panels?.tree ?? '', treePlaces);
+    return window_
+      ? rowSlide(
+          sockets.map(socket => socket.box),
+          window_.box,
+        )
+      : null;
+  };
+  const treeRowOf = (whole: readonly PiecePart[]): number =>
+    Math.min(treeScroll.at, treeSlideOf(whole)?.furthest ?? 0);
+  /** The marks that say the tree runs on, where it does not run on that way. */
+  const treeMarks = (whole: readonly PiecePart[]): string[] => {
+    const furthest = treeSlideOf(whole)?.furthest ?? 0;
+    const at = treeRowOf(whole);
+    return [at > 0 ? '' : spec.marks?.above, at < furthest ? '' : spec.marks?.below].filter(
+      (mark): mark is string => Boolean(mark),
+    );
+  };
+
   const sliceOf = (whole: readonly PiecePart[]) =>
     listSlice(whole, { list, items: known, scroll: scroll.at, values: columnsOf });
 
@@ -248,7 +305,12 @@ function Worn({
           ? pageTabs.slice(Math.max(1, pages))
           : open === 'mounts'
             ? pageTabs.slice(sides.length)
-            : pageTabs),
+            : inBook
+              ? pageTabs.slice(trees.length)
+              : pageTabs),
+        // The tree slides under its window, drawn apart; the marks at
+        // the window's top and foot show only where it runs on that way.
+        ...(inBook ? [spec.panels!.tree!, ...treeMarks(whole)] : []),
         // The riding page's own seats: the ones its tree does not use,
         // and the arrow out of a seat nothing follows.
         ...ridingHides(whole, rideStanding),
@@ -256,10 +318,28 @@ function Worn({
     }),
     ROW,
   );
-  // The talents have a page of their own in this build — a wide one,
-  // laid out the other way round — so the tab opens that rather than
-  // dressing this window's own panel with it.
-  if (open === 'talents') {
+  /**
+   * The side tabs that draw nothing at rest, planned on the face that says
+   * where each is pressed and what it holds. Measured, not drawn.
+   */
+  const emptyAtRest = pageTabs.filter(
+    control =>
+      spec.resting?.[control] !== undefined &&
+      worn.whole.find(part => part.path === control)?.draws === false,
+  );
+  const resting = useWorn(
+    emptyAtRest.length ? spec.dialog : undefined,
+    spec.frame,
+    {
+      only: emptyAtRest,
+      frames: Object.fromEntries(emptyAtRest.map(control => [control, spec.resting![control]!])),
+    },
+    ROW,
+  );
+  // Where the build has a talent screen of its own — a wide one, laid out
+  // the other way round — the tab opens that rather than dressing this
+  // window's own page with it.
+  if (open === 'talents' && !inBook) {
     // On the movie's own screen rather than in the row beside the bar:
     // this page is the size of that whole screen, which is what makes it
     // a page rather than a panel.
@@ -285,6 +365,14 @@ function Worn({
   const atRest = (path: string): PiecePart | undefined => {
     const found = worn.whole.find(one => one.path === path);
     return found && { ...found, box: { ...found.box, x: found.box.x + dx, y: found.box.y + dy } };
+  };
+
+  /** Where a side tab's mark stands: for a tab that draws nothing at rest, its resting socket. */
+  const markIn = (control: string, part: PiecePart): PiecePart => {
+    const rest = atRest(control);
+    const point = atRest(`${control}/displayCallback`);
+    if (rest && rest.box.w > 0) return markBox(rest, point);
+    return resting.find(control) ?? markBox(part, point);
   };
 
   if (!worn.image || !worn.frame) return null;
@@ -328,11 +416,14 @@ function Worn({
           <button
             key={tab.control}
             type="button"
+            data-tab={tab.control}
             aria-current={tab.panel === open ? 'true' : undefined}
             aria-label={tab.caption || tab.panel}
             onClick={() => {
               setOpen(tab.panel);
               setPage(0);
+              treeScroll.reset();
+              setTalentRead(null);
             }}
             style={worn.box(part)}
             className={HIT}
@@ -346,15 +437,29 @@ function Worn({
         ? pageTabs.slice(0, pages)
         : open === 'mounts'
           ? pageTabs.slice(0, sides.length)
-          : []
+          : inBook
+            ? pageTabs.slice(0, trees.length)
+            : []
       ).map((control, at) => {
         const part = worn.find(control);
         const mine = open === 'mounts';
         if (!part) return null;
-        const inside = markBox(atRest(control) ?? part, atRest(`${control}/displayCallback`));
-        const icon = mine ? sides[at]?.icon : markOf(kinds[at]);
+        const inside = markIn(control, part);
+        // A tab that draws nothing at rest is pressed where its resting
+        // socket is, on the page, so its word is in the page's ink.
+        const pressed = part.box.w > 0 ? part : (resting.find(control) ?? part);
+        // On the talent page, the class's own mark for the tree.
+        const icon = mine
+          ? sides[at]?.icon
+          : inBook
+            ? spec.pictures?.[String(heroClass.value)]?.[at]
+            : markOf(kinds[at]);
         // No set has a mark for the spells with no class; the tab says what it is.
-        const word = mine ? sides[at]?.caption : kinds[at] === 'gm' ? PAGE_NAMES.gm : undefined;
+        const word = mine
+          ? sides[at]?.caption
+          : !inBook && kinds[at] === 'gm'
+            ? PAGE_NAMES.gm
+            : undefined;
         return (
           <div key={control}>
             {inside && icon ? (
@@ -362,8 +467,8 @@ function Worn({
             ) : null}
             {word ? (
               <span
-                className={`pointer-events-none absolute flex items-center justify-center font-chrome text-xs font-bold ${at === (mine ? side : page) ? 'text-ink-900' : 'text-parchment-100'}`}
-                style={worn.box(part)}
+                className={`pointer-events-none absolute flex items-center justify-center font-chrome text-xs font-bold ${at === (mine ? side : page) || pressed !== part ? 'text-ink-900' : 'text-parchment-100'}`}
+                style={worn.box(pressed)}
               >
                 {word}
               </span>
@@ -374,17 +479,23 @@ function Worn({
               aria-label={
                 mine
                   ? (sides[at]?.caption ?? sides[at]?.panel ?? '')
-                  : kinds[at]
-                    ? PAGE_NAMES[kinds[at]]
-                    : `Page ${at + 1}`
+                  : inBook
+                    ? (TREE_NAMES[at] ?? `Tree ${at + 1}`)
+                    : kinds[at]
+                      ? PAGE_NAMES[kinds[at]]
+                      : `Page ${at + 1}`
               }
               onClick={() => {
                 if (mine) {
                   setSide(at);
                   setPage(0);
                 } else setPage(at);
+                if (inBook) {
+                  treeScroll.reset();
+                  setTalentRead(null);
+                }
               }}
-              style={worn.box(part)}
+              style={worn.box(pressed)}
               className={HIT}
             />
           </div>
@@ -442,6 +553,70 @@ function Worn({
         labels={{ up: 'Earlier spells', down: 'Later spells' }}
         onStep={way => scroll.step(way === 'up' ? -1 : 1, slice.furthest)}
       />
+
+      {/* The talent page: the tree, sliding up and down under its
+          window a tier at a time, and the points left to spend. */}
+      {inBook
+        ? (() => {
+            const window_ = worn.find(spec.panels!.window);
+            const windowWhole = worn.whole.find(part => part.path === spec.panels!.window);
+            const groupWhole = worn.whole.find(part => part.path === spec.panels!.tree);
+            const slide = treeSlideOf(worn.whole);
+            if (!window_ || !windowWhole || !groupWhole || !slide) return null;
+            const row = treeRowOf(worn.whole);
+            const shift = slide.rest - row * slide.pitch;
+            return (
+              <div
+                ref={treeWindow}
+                data-talent-window
+                data-row={row}
+                className="pointer-events-auto absolute touch-none overflow-hidden"
+                style={worn.box(window_)}
+                {...rowGestures(
+                  treeScroll,
+                  () => {
+                    const box = treeWindow.current?.getBoundingClientRect();
+                    return box && windowWhole.box.h
+                      ? (box.height / windowWhole.box.h) * slide.pitch
+                      : 0;
+                  },
+                  slide.furthest,
+                  () => false,
+                )}
+              >
+                <ArtTalentTree
+                  dialog={spec.dialog}
+                  part={spec.panels!.tree!}
+                  tree={trees[page]}
+                  down
+                  at={{
+                    x: windowWhole.box.x - groupWhole.box.x,
+                    y: windowWhole.box.y - groupWhole.box.y - shift,
+                  }}
+                  room={windowWhole.box}
+                  onSize={() => {}}
+                  onPick={(place, at) => setTalentRead({ place, at })}
+                />
+              </div>
+            );
+          })()
+        : null}
+      {inBook
+        ? (() => {
+            const field = worn.fieldOf(worn.find(spec.values?.points));
+            const says = spec.formats?.points;
+            return field && says ? (
+              <span style={worn.words(field, INK)}>{fill(says, pointsToSpend())}</span>
+            ) : null;
+          })()
+        : null}
+      {inBook && talentRead ? (
+        <ArtTalentCard
+          place={talentRead.place}
+          beside={talentRead.at}
+          onClose={() => setTalentRead(null)}
+        />
+      ) : null}
 
       {/* The riding page: a picture and a rank in each seat its own
           little tree uses. What it teaches is a spell, and the picture

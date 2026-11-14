@@ -1326,9 +1326,30 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
       mounts: 'panelSpell',
       pets: 'panelSpell',
       talents: 'panelTalent',
+      // The talent page's own tree and the window it slides up and down
+      // under, for a build with no talent screen of its own; a tab down
+      // the side a tree.
+      tree: 'panelTalent/group',
+      window: 'panelTalent/mask',
     },
+    // The marks along the window's top and foot that say the tree runs on.
+    marks: { above: 'panelTalent/lineTop', below: 'panelTalent/lineBottom' },
+    // The points left, as the build's own sentence, across the page's name field.
+    values: { points: 'panelTalent/textPointName' },
+    // Each class's own mark for each of its trees, by the server's class
+    // numbers: warrior, mage, ranger, monk.
+    pictures: {
+      '1': ['class/ui_class_warrior_01.png', 'class/ui_class_warrior_02.png'],
+      '2': ['class/ui_class_mage_01.png', 'class/ui_class_mage_02.png'],
+      '3': ['class/ui_class_ranger_01.png', 'class/ui_class_ranger_02.png'],
+      '4': ['class/ui_class_monk_01.png', 'class/ui_class_monk_02.png'],
+    },
+    optional: ['panelTalent/group', 'panelTalent/mask', 'panelTalent/textPointName'],
     // The five tabs down the side, one per kind of spell; the second face is the one showing.
     faces: { btnPage01: 1, btnPage02: 1, btnPage03: 1, btnPage04: 1, btnPage05: 1 },
+    // Where a tab's first face is empty, the face whose socket it is
+    // pressed and marked in while another is showing.
+    resting: { btnPage01: 2, btnPage02: 2, btnPage03: 2, btnPage04: 2, btnPage05: 2 },
     captions: {
       textSpell: '@626?~74f5d6ce7806cf72~6',
       textMount: '@1603?~6c166aba16129096~5',
@@ -1338,10 +1359,14 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
       // By its whole path: the riding page keeps rows of the same name.
       spells: { row: 'panelSpell/group/item', fields: { name: 'text01', note: 'text02' } },
     },
-    formats: { rank: '@1094?~ac9b9e2799f26ce3~4' },
+    formats: { rank: '@1094?~ac9b9e2799f26ce3~4', points: '@628?~d9a8024024e068c4~13' },
     hidden: ['panelRiding', 'TalentType', 'textHelp'],
-    // The help card.
-    later: { hidden: ['btninformation'] },
+    later: {
+      // The help card.
+      hidden: ['btninformation'],
+      // The Flame Knight's marks for its two trees.
+      pictures: { '5': ['class/fk_talent_1.png', 'class/fk_talent_2.png'] },
+    },
   },
 
   social: {

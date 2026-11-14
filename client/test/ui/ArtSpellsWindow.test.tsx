@@ -11,7 +11,9 @@ import { setMovie } from '../../src/ui/art/pieceStore';
 import { uiSpec } from '../../src/ui/art/uiSpec';
 import {
   initSpells,
+  setClassTrees,
   setMountSpells,
+  setTalentPlaces,
   setSpellName,
   setSpellStats,
   spellStats,
@@ -22,10 +24,15 @@ import { SCREEN_MEANINGS } from '../../src/ui/art/screenMeanings';
 import type { ScreenSpec } from '../../src/ui/art/uiSpec';
 import type { UiSkinData, UiSkinPlaced } from '../../src/assets/types';
 import { clearMovies } from '../helpers/stores';
+import { heroClass } from '../../src/ui/hudStore';
+import type { TalentRow } from '../../src/assets/types';
 
 afterEach(() => {
   cleanup();
   clearMovies();
+  setTalentPlaces([]);
+  setClassTrees(new Map());
+  heroClass.value = 0;
   uiSpec.value = null;
   initSpells([], []);
   setMountSpells([]);
@@ -382,5 +389,137 @@ describe('the mark on a side tab', () => {
   it('is centred on the tab where the movie marks no point', () => {
     const at = markBox(part(190, 60, 34.7, 51.5), undefined).box;
     expect(at.x + at.w / 2).toBeCloseTo(190 + 34.7 / 2);
+  });
+});
+
+describe('ArtSpellsWindow, on the book’s own talent page', () => {
+  /**
+   * A book whose talents are a page of its own, as 4.2.2's are: a tree of
+   * twelve places, three across in four rows 40 apart, under a window two
+   * rows tall, with two tabs down the side.
+   */
+  function talentBook(): UiSkinData {
+    const book = skin();
+    book.shapes.push({
+      id: 13,
+      bounds: { x: 0, y: 0, w: 120, h: 80 },
+      fills: [{ kind: 'solid', css: 'rgb(4, 5, 6)', opacity: 1 }],
+      paths: [{ fill: 1, d: 'M0 0L120 0L120 80L0 80Z' }],
+    });
+    const socket = { id: 30, frameCount: 1, frames: [[place(12, 0, 0, 'btn')]] };
+    const tree = {
+      id: 31,
+      frameCount: 1,
+      frames: [
+        Array.from({ length: 12 }, (_, at) =>
+          place(
+            30,
+            (at % 3) * 40,
+            Math.floor(at / 3) * 40,
+            `talent${String(at + 1).padStart(2, '0')}`,
+          ),
+        ),
+      ],
+    };
+    const page = {
+      id: 32,
+      frameCount: 1,
+      frames: [[place(31, 0, 0, 'group'), place(13, 0, 0, 'mask')]],
+    };
+    book.sprites.unshift(socket, tree, page);
+    const dialog = book.sprites.find(sprite => sprite.id === 24)!;
+    // The spell list is a page of its own here too, as the tree is.
+    dialog.frames[0]!.find(one => one.name === 'group')!.name = 'panelSpell';
+    dialog.frames[0]!.push(
+      place(32, 10, 40, 'panelTalent'),
+      place(12, 200, 200, 'btnTalents'),
+      place(12, 200, 0, 'btnPage01'),
+      place(12, 200, 40, 'btnPage02'),
+      place(12, 200, 80, 'btnPage03'),
+    );
+    return book;
+  }
+  const BOOK: ScreenSpec = {
+    dialog: 'dlgBook',
+    frame: 'btnempty',
+    tabs: [
+      { control: 'btnSpells', panel: 'spells', caption: 'Spells' },
+      { control: 'btnTalents', panel: 'talents', caption: 'Talents' },
+    ],
+    faces: { btnPage01: 1, btnPage02: 1, btnPage03: 1 },
+    panels: {
+      spells: 'panelSpell',
+      talents: 'panelTalent',
+      tree: 'panelTalent/group',
+      window: 'panelTalent/mask',
+    },
+    lists: {
+      spells: { view: 'panelSpell', row: 'panelSpell/item', fields: { name: 'text01' } },
+    },
+  };
+  /** A place on a tree, at a tier and column, with as many ranks as asked. */
+  const placeOn = (classId: number, id: number, tier: number, column: number, ranks: number) =>
+    ({
+      id,
+      tier,
+      column,
+      classId,
+      requires: 0,
+      after: 0,
+      ranks,
+      spells: [id],
+      icon: '',
+      says: 0,
+    }) as TalentRow;
+
+  function wearBook(screens: Record<string, ScreenSpec> = {}): void {
+    uiSpec.value = { screens: { spells: BOOK, ...screens } };
+    setMovie({ skin: talentBook(), art: new Map() });
+    // Two trees with places, four tiers on the first and one on the
+    // second, and a third the class names that has none.
+    setTalentPlaces([
+      ...[1, 2, 3, 4].map(tier => placeOn(50, tier, tier, 1, 3)),
+      placeOn(51, 10, 1, 2, 1),
+    ]);
+    setClassTrees(new Map([[1, [50, 51, 99]]]));
+    heroClass.value = 1;
+  }
+
+  it('opens the class’s trees on the page, a tab down the side for each that has places', () => {
+    wearBook();
+    const { container, getByLabelText, queryByLabelText, getAllByLabelText } = render(
+      <ArtSpellsWindow onClose={() => {}} onCast={() => {}} />,
+    );
+    fireEvent.click(getByLabelText('Talents'));
+    expect(container.querySelector('[data-talent-window]')).not.toBeNull();
+    expect(getByLabelText('First tree')).toBeTruthy();
+    expect(getByLabelText('Second tree')).toBeTruthy();
+    expect(queryByLabelText('Page 3')).toBeNull();
+    expect(getAllByLabelText('3 ranks')).toHaveLength(4);
+    fireEvent.click(getByLabelText('Second tree'));
+    expect(queryByLabelText('3 ranks')).toBeNull();
+    expect(getByLabelText('1 rank')).toBeTruthy();
+  });
+
+  it('slides the tree up a tier at a time, as far as its last tier', () => {
+    wearBook();
+    const { container, getByLabelText } = render(
+      <ArtSpellsWindow onClose={() => {}} onCast={() => {}} />,
+    );
+    fireEvent.click(getByLabelText('Talents'));
+    const window_ = () => container.querySelector<HTMLElement>('[data-talent-window]')!;
+    expect(window_().dataset.row).toBe('0');
+    for (let turn = 0; turn < 5; turn++) fireEvent.wheel(window_(), { deltaY: 100 });
+    // Four tiers in a window two tall: two to slide.
+    expect(window_().dataset.row).toBe('2');
+  });
+
+  it('opens the build’s own talent screen instead, where it has one', () => {
+    wearBook({ talents: { dialog: 'dlgTalent' } });
+    const { container, getByLabelText } = render(
+      <ArtSpellsWindow onClose={() => {}} onCast={() => {}} />,
+    );
+    fireEvent.click(getByLabelText('Talents'));
+    expect(container.querySelector('[data-talent-window]')).toBeNull();
   });
 });

@@ -277,6 +277,12 @@ export interface ScreenSpec {
   };
   /** The face a control wears while it is the one showing. */
   faces?: Record<string, number>;
+  /**
+   * Where a control's first face draws nothing, the face that says where it
+   * is pressed and what it holds while another is showing. Not drawn: the
+   * build draws it only for a tab that cannot be opened.
+   */
+  resting?: Record<string, number>;
   /** Bars stepped through a clip's faces, full at the first and empty at the last. */
   bars?: {
     frames: number;

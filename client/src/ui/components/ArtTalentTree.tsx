@@ -1,7 +1,7 @@
 /**
  * A class's talent tree on the shipped page: the movie's grid filled with
  * the places the class has (from local tables), ranks from the server plus
- * staged points, unbought places greyed. Taller than its window, so drawn
+ * staged points, unbought places greyed. Bigger than its window, so drawn
  * apart and slid under it.
  */
 
@@ -40,6 +40,12 @@ export interface ArtTalentTreeProps {
   onSize(wide: number, tall: number): void;
   /** Pressing a place asks for it to be read, and says where on the page it is. */
   onPick?(place: TalentRow, beside: WhereOnPage): void;
+  /**
+   * Tiers run down the page rather than across it, as in a book's own
+   * talent page: the tree stands where the movie puts it, with no rule
+   * drawn along its foot.
+   */
+  down?: boolean;
 }
 
 /** Which places the grid has, in reading order: across, then down. */
@@ -54,6 +60,24 @@ export function perTier(sockets: readonly PiecePart[]): number {
   const across = new Set(sockets.map(one => Math.round(one.box.x))).size;
   const down = new Set(sockets.map(one => Math.round(one.box.y))).size;
   return Math.max(1, Math.min(across || 1, down || 1));
+}
+
+/**
+ * The sockets of a tree's grid that hold one of `places`, in reading order,
+ * with every state showing: what a window over the tree slides along.
+ */
+export function placedSockets(
+  whole: readonly PiecePart[],
+  part: string,
+  places: readonly TalentRow[],
+): PiecePart[] {
+  const grid = gridOf(whole.filter(one => one.path.startsWith(`${part}/`)));
+  const across = perTier(grid);
+  const standing = new Set(places.map(place => `${place.tier}:${place.column}`));
+  return grid.filter(socket => {
+    const { tier, column } = seatOf(socket, across);
+    return standing.has(`${tier}:${column}`);
+  });
 }
 
 /** A socket's grid seat from the number in its name, not its list position (unused sockets are not drawn). */
@@ -74,6 +98,8 @@ function hidesFor(
       const cut = one.path.lastIndexOf('/');
       const parent = cut < 0 ? '' : one.path.slice(0, cut);
       if (one.path === part || one.path.startsWith(`${part}/`)) return false;
+      // What holds the tree, where it is not on the page's top level.
+      if (onPath(one.path)) return false;
       return parent === '' || onPath(parent);
     })
     .map(one => one.path);
@@ -127,6 +153,7 @@ export function ArtTalentTree({
   room,
   onSize,
   onPick,
+  down = false,
 }: ArtTalentTreeProps): JSX.Element | null {
   const places = talentPlaces.value.filter(place => place.classId === tree);
   // What each place shows is what is learned and what is staged on it.
@@ -169,9 +196,10 @@ export function ArtTalentTree({
   // one column would otherwise read as a grid one place wide.
   const across = perTier(gridOf(worn.whole));
   /** The picture's top strip belongs to the page (leather and chain), so the tree lifts by it. */
-  const above = grid.length
-    ? Math.max(0, Math.min(...grid.map(socket => socket.box.y)) - (worn.frame?.y ?? 0))
-    : 0;
+  const above =
+    grid.length && !down
+      ? Math.max(0, Math.min(...grid.map(socket => socket.box.y)) - (worn.frame?.y ?? 0))
+      : 0;
   const wide = worn.frame?.w ?? 0;
   const tall = worn.frame?.h ?? 0;
   /** How far the tree comes down to fit across the window it shows through. */
@@ -203,19 +231,21 @@ export function ArtTalentTree({
           the foot of the tree rather than on the page. Only that band of
           the tree's own picture is shown: the rest of it is the page's
           parchment over again. */}
-      <div
-        className="absolute inset-x-0 bottom-0 overflow-hidden"
-        style={{ height: `${(BAND / tall) * 100}%` }}
-      >
-        <img
-          src={worn.image.url}
-          alt=""
-          aria-hidden="true"
-          className="absolute bottom-0 left-0 w-full"
-          style={{ height: `${(tall / BAND) * 100}%` }}
-          draggable={false}
-        />
-      </div>
+      {down ? null : (
+        <div
+          className="absolute inset-x-0 bottom-0 overflow-hidden"
+          style={{ height: `${(BAND / tall) * 100}%` }}
+        >
+          <img
+            src={worn.image.url}
+            alt=""
+            aria-hidden="true"
+            className="absolute bottom-0 left-0 w-full"
+            style={{ height: `${(tall / BAND) * 100}%` }}
+            draggable={false}
+          />
+        </div>
+      )}
 
       <div className="absolute inset-0">
         {grid.map(socket => {
@@ -288,7 +318,7 @@ export function ArtTalentTree({
             it. Taken from the places themselves, so a tree with a gap in
             it still counts up the way it climbs. */}
         {[...new Map(places.map(place => [place.tier, place.requires])).entries()]
-          .filter(([, cost]) => cost > 0)
+          .filter(([, cost]) => cost > 0 && !down)
           .map(([tier, cost]) => {
             const under = grid.find(socket => seatOf(socket, across).tier === tier);
             if (!under || !worn.frame) return null;

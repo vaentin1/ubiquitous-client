@@ -153,8 +153,9 @@ const ONLY = (params.get('only') ?? '').split(',').filter(Boolean);
 const OPEN = (params.get('open') ?? 'bag') as ScreenId;
 const PACKS = (params.get('packs') ?? 'res.bin,tables.bin').split(',').filter(Boolean);
 const LOOSE = ['Fontin-Regular.ttf'];
-/** Whose sheet the gallery shows: `?hero=warrior`, `mage` or `ranger`. A mage by default. */
-const HERO_CLASS = { warrior: 1, mage: 2, ranger: 3 }[params.get('hero') ?? ''] ?? 2;
+/** Whose sheet and talents the gallery shows: `?hero=warrior`, `mage`, `ranger`, `monk` or `knight`. A mage by default. */
+const HERO_CLASS =
+  { warrior: 1, mage: 2, ranger: 3, monk: 4, knight: 5 }[params.get('hero') ?? ''] ?? 2;
 
 /** Item entries to fill the sample data with; what each is comes from the build. */
 const ENTRIES = [5206, 1049, 3] as const;
@@ -202,18 +203,18 @@ function stock(): (typeof inventory)['value']['items'] {
 
 const nothing = () => undefined;
 
-/** The first place on the first class's first tree, from the build's own tables. */
-function firstPlace(): TalentRow | undefined {
-  const tree = classTrees.value.get(1)?.[0];
+/** The first place on a class's first tree, from the build's own tables. */
+function firstPlace(classId = 1): TalentRow | undefined {
+  const tree = classTrees.value.get(classId)?.[0];
   return talentPlaces.value
     .filter(place => place.classId === tree)
     .sort((a, b) => a.tier - b.tier || a.column - b.column)[0];
 }
 
 /** Points to spend, with one staged on the first place and not yet sent. */
-function stageOne(): void {
+function stageOne(classId = 1): void {
   applyTalentState(5, []);
-  const first = firstPlace();
+  const first = firstPlace(classId);
   talentStaged.value = first ? new Map([[first.id, 1]]) : new Map();
 }
 
@@ -1093,6 +1094,18 @@ const SHOWN: Shown[] = [
           setMountSpells([20]);
         }}
       >
+        <ArtSpellsWindow onClose={nothing} onCast={nothing} />
+      </Seeded>
+    ),
+  },
+  {
+    screen: 'spells',
+    label: 'The spell book, on its talents',
+    sized: 'fill',
+    tabs: false,
+    press: ['[data-tab="btnTalents"]'],
+    draw: () => (
+      <Seeded seed={() => stageOne(HERO_CLASS)}>
         <ArtSpellsWindow onClose={nothing} onCast={nothing} />
       </Seeded>
     ),
