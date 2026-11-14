@@ -184,6 +184,17 @@ function pinnedFor<T>(entries: number, byBuild: Partial<Record<SupportedBuild, T
   return build ? byBuild[build] : undefined;
 }
 
+/**
+ * 4.2.2, told apart by its `res.bin` entries or its `items.tbl` rows, for the
+ * facts of its data that 1.1.4 and 2.2.0 do not share. Any other build is
+ * held to theirs.
+ */
+const BUILD_422 = { resEntries: 25671, itemRows: 12731 } as const;
+
+function is422(tables: WorldTables): boolean {
+  return tables.keyedRows('items').size === BUILD_422.itemRows;
+}
+
 function unsupportedBuild(path: string, entries: number): string {
   return `${path} (${entries} entries, unsupported build)`;
 }
@@ -873,7 +884,10 @@ describe.skipIf(!TABLES)('tables.bin, from the user packs', () => {
 
   it('ships a hair colour for every playable body that paints hair', async () => {
     const pack = await PackReader.open(await fileSource(RES!), 'res.bin');
-    const names = pack.entries.map(e => e.name);
+    // 4.2.2 keeps the hair textures in `res_t.bin`, beside the bodies' `res.bin`.
+    const textures = findPack('res_t.bin');
+    const moved = textures ? await PackReader.open(await fileSource(textures), 'res_t.bin') : null;
+    const names = [...pack.entries, ...(moved?.entries ?? [])].map(e => e.name);
     const bodies = names.filter(n =>
       /^model\/npc\/character\/[^/]+\/(?:male|female)\/[^/]+_h\.bdae$/.test(n),
     );
@@ -1230,13 +1244,21 @@ describe.skipIf(!TABLES)('tables.bin, from the user packs', () => {
 
     const offering = facts.filter(one => one.startsQuest > 0);
     expect(offering.length).toBeGreaterThan(10);
-    expect(offering.filter(one => !knownQuests.has(one.startsQuest))).toEqual([]);
+    // Two 4.2.2 items name quests 1612 and 1688, which its quest table does not ship.
+    const dangling = [...tables.keyedRows('items').keys()].filter(id => {
+      const quest = tables.itemFacts(id)!.startsQuest;
+      return quest > 0 && !knownQuests.has(quest);
+    });
+    expect(dangling).toEqual(is422(tables) ? [12752, 13339] : []);
     // No row both offers a quest and casts on use.
     expect(offering.filter(one => one.spellSlots.some(slot => slot.trigger === 1))).toEqual([]);
 
     const whileWorn = facts.filter(one => one.spellSlots.some(slot => slot.trigger === 2));
     expect(whileWorn.length).toBeGreaterThan(0);
-    expect([...new Set(whileWorn.map(one => one.itemClass))].sort()).toEqual([2, 4]);
+    // 4.2.2's legendary gems (class 3) cast while socketed in something worn.
+    expect([...new Set(whileWorn.map(one => one.itemClass))].sort()).toEqual(
+      is422(tables) ? [2, 3, 4] : [2, 4],
+    );
     expect(facts.filter(one => useOf(one) === 'cast').length).toBeGreaterThan(500);
   }, 60_000);
 
@@ -2413,7 +2435,8 @@ describe.skipIf(!TABLES)('spell visuals, in the user tables', () => {
     const names = new Map<number, string>();
     const ranks = new Map<number, number>();
     for (const id of spells.keys()) {
-      if (!tables.spellCastable(id)) continue;
+      // A pet spell is one of its kind, with no rank in its series.
+      if (!tables.spellCastable(id) || tables.spellStats(id).pet) continue;
       castable++;
       const rank = tables.spellRank(id);
       if (rank > 0) {
@@ -2426,8 +2449,9 @@ describe.skipIf(!TABLES)('spell visuals, in the user tables', () => {
     }
     // Most of the castable table carries a real rank; the rest (companion
     // "-hold" spells, oddities with no series) fall back to rank 1 in
-    // `dedupeRanks` rather than being lost.
-    expect(withRank / castable).toBeGreaterThan(0.9);
+    // `dedupeRanks` rather than being lost. 4.2.2's later class trees carry
+    // more of them: 0.886 of its castable spells have a rank.
+    expect(withRank / castable).toBeGreaterThan(is422(tables) ? 0.88 : 0.9);
 
     // One ability's ranks 1-11 from one generation of the data (the ids a
     // live character would actually hold at once): one name for all of them,
@@ -2483,7 +2507,8 @@ describe.skipIf(!TABLES)('spell visuals, in the user tables', () => {
     );
     expect(mountSpells.length).toBeGreaterThan(0);
     const unnamed = mountSpells.filter(id => !shipped.has(tables.spellMountId(id)));
-    expect(unnamed).toEqual([]);
+    // 4.2.2's Blazing Dragon names a mount row its mount table does not ship.
+    expect(unnamed).toEqual(is422(tables) ? [16608] : []);
   }, 60_000);
 
   it('lists every pet item spell as a castable pet', async () => {
@@ -2503,7 +2528,8 @@ describe.skipIf(!TABLES)('spell visuals, in the user tables', () => {
     let costing = 0;
     let castable = 0;
     for (const id of tables.keyedRows('spell_new').keys()) {
-      if (!tables.spellCastable(id)) continue;
+      // A pet spell costs nothing to call.
+      if (!tables.spellCastable(id) || tables.spellStats(id).pet) continue;
       castable++;
       const { powerCost, cooldownMs, range } = tables.spellStats(id);
       // A spell's cost, in points of its caster's power.
@@ -2615,8 +2641,9 @@ describe.skipIf(!TABLES)('zone atmosphere', () => {
         );
       }
     }
-    // 68 ship all zeros; only a handful are genuinely rootless.
-    expect(empty.length).toBeLessThan(10);
+    // 68 ship all zeros; only a handful are genuinely rootless. 4.2.2 has
+    // about a hundred rows with no parent, and 73 zones come out empty.
+    expect(empty.length).toBeLessThan(is422(tables) ? 74 : 10);
 
     // And at least one zone really did inherit rather than merely being fine
     // already — otherwise this test would pass with the fallback deleted.
@@ -2768,6 +2795,9 @@ describe.skipIf(!RES)('area.cnfg, from the user packs', () => {
     // Every neighbour named is itself a region the file lists, and nothing
     // claims to adjoin itself.
     const known = new Set(links.regions.filter(Boolean));
+    // 4.2.2's Obsidian Shore is two regions of the zone table, and the file
+    // lists a button for only one of them, 1689.
+    if (pack.length === BUILD_422.resEntries) known.add(1633);
     for (const [zone, dirs] of Object.entries(links.neighbours)) {
       for (const id of dirs) {
         if (!id) continue;
@@ -2791,7 +2821,10 @@ describe.skipIf(!RES)('area.cnfg, from the user packs', () => {
 });
 
 describe.skipIf(!TABLES)('the teleport map, against the user zone table', () => {
-  async function realZones(): Promise<ReturnType<WorldTables['zones']>> {
+  async function realZones(): Promise<{
+    zones: ReturnType<WorldTables['zones']>;
+    tables: WorldTables;
+  }> {
     const pack = await PackReader.open(await fileSource(TABLES!), 'tables.bin');
     const tables = await WorldTables.load(async entry => {
       const found = pack.get(entry);
@@ -2801,7 +2834,7 @@ describe.skipIf(!TABLES)('the teleport map, against the user zone table', () => 
     const names = namesEntry
       ? tables.setStrings('String_Zones_en', new FTable(await pack.read(namesEntry)))
       : new Map<number, string>();
-    return tables.zones(names);
+    return { zones: tables.zones(names), tables };
   }
 
   function inside(bounds: readonly number[], at: readonly number[]): boolean {
@@ -2815,14 +2848,19 @@ describe.skipIf(!TABLES)('the teleport map, against the user zone table', () => 
 
   /** A top zone is priority 1 or 2, not rootless: six rootless 2.2.0 rows are placeholders with nonsense bounds. */
   it('separates the shipped regions from the rootless placeholders', async () => {
-    const zones = await realZones();
+    const { zones, tables } = await realZones();
     const byPriority = zones.filter(z => z.priority === 1 || z.priority === 2);
     const byParent = zones.filter(z => z.parentId <= 0);
 
     expect(byPriority.length).toBeGreaterThan(20);
     expect(byParent.length).toBeGreaterThan(byPriority.length);
     // Every priority top really is rootless; the extras are the placeholders.
-    for (const zone of byPriority) expect(zone.parentId).toBeLessThanOrEqual(0);
+    // 4.2.2 hangs five under a dungeon row of priority 0, or under a row it
+    // does not ship.
+    const parented = byPriority.filter(zone => zone.parentId > 0).map(zone => zone.id);
+    expect(parented.sort((a, b) => a - b)).toEqual(
+      is422(tables) ? [1299, 1321, 1446, 1502, 1503] : [],
+    );
   });
 
   it('gives nearly every bus stop a named zone on exactly one region', async () => {
@@ -2831,7 +2869,7 @@ describe.skipIf(!TABLES)('the teleport map, against the user zone table', () => 
       const found = pack.get(entry);
       return found ? pack.read(found) : null;
     });
-    const zones = await realZones();
+    const { zones } = await realZones();
     // `type` 0 is a bus stop; 1 is a dungeon gate, which the map does not offer.
     const stops = tables.teleportStops().filter(stop => stop.type === 0);
     expect(stops.length).toBeGreaterThan(20);
@@ -2858,8 +2896,9 @@ describe.skipIf(!TABLES)('the teleport map, against the user zone table', () => 
       if (detail) named++;
     }
 
-    // The two with no region at all are filler rows on map 0.
-    expect(homeless).toBeLessThanOrEqual(2);
+    // The two with no region at all are filler rows on map 0. 4.2.2 has four
+    // of those, and one stop on map 42 inside a priority-0 root zone.
+    expect(homeless).toBeLessThanOrEqual(is422(tables) ? 5 : 2);
     expect(named / (stops.length - homeless)).toBeGreaterThan(0.9);
   }, 60_000);
 });
