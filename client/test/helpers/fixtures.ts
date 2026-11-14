@@ -403,3 +403,39 @@ function tableEntries(t: Record<string, Uint8Array>): Array<{ name: string; data
     { name: 'tables/spell_effect.tbl', data: spellEffect },
   ];
 }
+
+/** A string file holding the given groups, laid out as the build lays them. */
+export function buildUiStrings(groups: string[][]): Uint8Array {
+  const bodies = groups.map(words => {
+    const bytes: number[] = [];
+    const offsets: number[] = [];
+    for (const word of words) {
+      offsets.push(bytes.length);
+      for (const code of new TextEncoder().encode(word)) bytes.push(code);
+      // Words end at a zero byte and are padded to a four-byte boundary.
+      do bytes.push(0);
+      while (bytes.length % 4);
+    }
+    const out = new Uint8Array(4 + 4 * words.length + bytes.length);
+    const view = new DataView(out.buffer);
+    view.setUint32(0, words.length, true);
+    offsets.forEach((at, i) => view.setUint32(4 + 4 * i, at, true));
+    out.set(bytes, 4 + 4 * words.length);
+    return out;
+  });
+
+  const edges: number[] = [];
+  let running = 0;
+  for (const body of bodies) edges.push((running += body.length));
+  const head = 6 + 4 * edges.length;
+  const out = new Uint8Array(head + running);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, edges.length + 1, true);
+  edges.forEach((edge, i) => view.setUint32(6 + 4 * i, edge, true));
+  let at = head;
+  for (const body of bodies) {
+    out.set(body, at);
+    at += body.length;
+  }
+  return out;
+}

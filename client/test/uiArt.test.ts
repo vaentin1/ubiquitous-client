@@ -39,6 +39,22 @@ describe('UiArt', () => {
     expect(uiIcon).toHaveBeenCalledTimes(3);
   });
 
+  it('says once that a build with a movie but no words draws its captions blank', async () => {
+    const uiSkin = vi.fn(async () => ({}));
+    const uiStrings = vi.fn(async () => []);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const ui = art({ uiSkin, uiStrings });
+    // Read the way entering the world reads it, twice over.
+    const warm = (ui as unknown as { warmUiMovie(): Promise<unknown> }).warmUiMovie.bind(ui);
+    await Promise.all([warm(), warm()]);
+    await warm();
+    await vi.waitFor(() => expect(uiStrings).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const said = warn.mock.calls.filter(call => String(call.join(' ')).includes('interface words'));
+    expect(said).toHaveLength(1);
+    warn.mockRestore();
+  });
+
   it('asks again for dialogs when the movie was not mounted the first time', async () => {
     const uiSkin = vi.fn(async () => null);
     const uiStrings = vi.fn(async () => null);

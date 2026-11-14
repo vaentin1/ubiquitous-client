@@ -156,7 +156,26 @@ export class UiArt {
       this.askUiMovie.set(movie, ask);
     }
     this.wantUiWords();
-    return ask();
+    const skin = ask();
+    void this.sayIfWordless(skin);
+    return skin;
+  }
+
+  private saidWordless = false;
+
+  /**
+   * A build whose movie reads but whose words do not draws every caption
+   * blank, which looks like a drawing fault; say so once, where it shows.
+   */
+  private async sayIfWordless(skin: Promise<UiSkinData | null>): Promise<void> {
+    if (!(await skin) || this.saidWordless) return;
+    // A build with a movie is mounted: its words answer now or never.
+    this.saidWordless = true;
+    if (await this.askUiWords?.()) return;
+    log.warn(
+      'interface words: this build has a movie but no words where they are looked for ' +
+        '(strings/EN.bar in res.bin or strings.bin), so every caption is blank',
+    );
   }
 
   private readonly uiEmblemsAsked = new Set<string>();

@@ -271,6 +271,8 @@ interface SheetLayout {
 
 /** Where the interface's words live, and in which language. */
 const UI_STRINGS_FILE = 'strings/EN.bar';
+/** The packs that may hold them: most builds keep them in `res.bin`, some in a pack of their own. */
+const UI_STRINGS_PACKS = ['res.bin', 'strings.bin'];
 
 export class PackAssetProvider implements AssetProvider {
   readonly name = 'pack(local)';
@@ -827,7 +829,7 @@ export class PackAssetProvider implements AssetProvider {
 
   /** The interface's words in the build's order; only the first group is the interface's. */
   async loadUiStrings(): Promise<readonly string[]> {
-    const bytes = await this.lib().readFirst(['res.bin'], UI_STRINGS_FILE);
+    const bytes = await this.lib().readFirst(UI_STRINGS_PACKS, UI_STRINGS_FILE);
     if (!bytes) throw new ResourceNotFoundError('uiStrings');
     return readUiStrings(bytes)[0] ?? [];
   }

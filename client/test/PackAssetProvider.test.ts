@@ -11,7 +11,8 @@ import {
   ResourceUnsupportedError,
 } from '../src/assets/providers/PackAssetProvider';
 import { Library } from '../src/assets/vfs/Library';
-import { buildPack, buildPvr, buildTablesPack, text } from './helpers/fixtures';
+import { uiStringsId } from '../src/assets/ids';
+import { buildPack, buildPvr, buildTablesPack, buildUiStrings, text } from './helpers/fixtures';
 
 /**
  * An .ipa is a plain zip whose members are the packs — plus, in a real one,
@@ -273,6 +274,22 @@ describe('PackAssetProvider', () => {
     await expect(provider.load({ kind: 'texture', ref: 'texture/nope.tga' })).rejects.toThrow(
       /not found/,
     );
+  });
+
+  it('reads the interface words from a pack of their own where the build keeps them there', async () => {
+    // Some builds ship `strings/EN.bar` in `strings.bin` rather than in
+    // `res.bin`; read only from `res.bin`, every caption in play came out blank.
+    const words = buildUiStrings([['Bag', 'Spells', 'Talents']]);
+    const provider = new PackAssetProvider();
+    await provider.useSource(
+      provider.offer(
+        ipaFile({
+          'res.bin': buildPack([]),
+          'strings.bin': buildPack([{ name: 'strings/EN.bar', data: words }]),
+        }),
+      ).id,
+    );
+    await expect(provider.load(uiStringsId())).resolves.toEqual(['Bag', 'Spells', 'Talents']);
   });
 
   it('dispatches every resource kind, and reports absent data as not-found', async () => {
