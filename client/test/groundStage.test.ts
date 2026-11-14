@@ -69,7 +69,7 @@ describe('GroundStage', () => {
     stage.canvas(canvas);
     expect(made).toHaveLength(1);
     expect(ground.watch).toHaveBeenCalledWith('close');
-    expect(ground.open).toHaveBeenCalledWith('human_selection');
+    expect(ground.open).toHaveBeenCalledTimes(1);
   });
 
   it('passes the camera and the dais on to the ground', () => {

@@ -27,6 +27,7 @@ import {
   networkAppearanceId,
   staticObjectModelId,
   teleportStopsId,
+  selectionGroundId,
   itemCatalogId,
   spellAvatarId,
   spellMountId,
@@ -182,6 +183,10 @@ export class ResourceSystem {
 
   teleportStops(): Promise<ResourceTypes['teleportStops']> {
     return this.get(teleportStopsId());
+  }
+
+  selectionGround(): Promise<ResourceTypes['selectionGround']> {
+    return this.get(selectionGroundId());
   }
 
   gossipMenu(id: number): Promise<ResourceTypes['gossipMenu']> {

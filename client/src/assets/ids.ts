@@ -39,6 +39,8 @@ export type ResourceId =
     }
   /** The list of zones the mounted game data contains. */
   | { readonly kind: 'zoneIndex' }
+  /** The ground the screens before the world stand on. */
+  | { readonly kind: 'selectionGround' }
   /** Every rideable mount, from `mountprototype.tbl`. */
   | { readonly kind: 'mountList' }
   /** The spells every character carries that the client acts on by itself. */
@@ -218,6 +220,8 @@ export function resourceKey(id: ResourceId): string {
       return `classIcon:${id.classId}`;
     case 'zoneIndex':
       return 'zoneIndex';
+    case 'selectionGround':
+      return 'selectionGround';
     case 'mountList':
       return 'mountList';
     case 'generalSpells':
@@ -348,6 +352,7 @@ export const tileId = (mapId: number, tx: number, tz: number, world?: string): I
 });
 export const modelId = (path: string): IdOf<'model'> => ({ kind: 'model', path });
 export const textureId = (ref: string): IdOf<'texture'> => ({ kind: 'texture', ref });
+export const selectionGroundId = (): IdOf<'selectionGround'> => ({ kind: 'selectionGround' });
 export const teleportStopsId = (): IdOf<'teleportStops'> => ({ kind: 'teleportStops' });
 export const spellAvatarId = (id: number): IdOf<'spellAvatar'> => ({ kind: 'spellAvatar', id });
 export const spellMountId = (id: number): IdOf<'spellMount'> => ({ kind: 'spellMount', id });

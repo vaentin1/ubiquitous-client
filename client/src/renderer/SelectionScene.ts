@@ -13,8 +13,8 @@ import type {
   EffectEmitter,
   EquipmentAttachment,
   Placement,
+  SelectionGround,
   TileData,
-  ZoneInfo,
 } from '../assets/types';
 import { attachPointId, effectId } from '../assets/ids';
 import { logger } from '../core/log';
@@ -70,30 +70,6 @@ export interface SelectionBody {
 /** Tiles loaded around the dais (~580 units across), so the wide view never sees an edge. */
 const TILES_OUT = 4;
 
-/** How far out to search for the dais: the map's middle is not where it stands. */
-const LOOK_OUT = 5;
-
-/** Clear ground round a dais that counts as room: about half its width. */
-const ELBOW_ROOM = 8;
-
-interface Ground {
-  mapId: number;
-  world: string | undefined;
-  middle: readonly [number, number] | number[];
-  sky: string | null;
-  hill: string | null;
-}
-
-/** The ground's name without underscores, `human_selection` → `humanselection_sky`; none if unshipped. */
-function skyOf(mapName: string): string {
-  return `model/scene/sky/general_sky/${mapName.replace(/_/g, '')}_sky.bdae`;
-}
-
-/** The dome's name with `_hill`, as the build names every horizon layer. */
-function hillOf(mapName: string): string {
-  return skyOf(mapName).replace(/\.bdae$/, '_hill.bdae');
-}
-
 export type SelectionView = 'wide' | 'close';
 
 export class SelectionScene {
@@ -134,7 +110,6 @@ export class SelectionScene {
   /** Drives itself: the world's frame loop has not started yet. */
   private frameHandle: number | null = null;
   private lastFrameAt = 0;
-  private mapName = '';
 
   constructor(
     private readonly resources: ResourceSystem,
@@ -162,43 +137,30 @@ export class SelectionScene {
     this.frameCamera();
   }
 
-  /** Load the named map and start drawing; a build without it draws nothing and says so once. */
-  async open(mapName: string): Promise<void> {
-    this.mapName = mapName;
+  /** Load the build's selection ground and start drawing; a build without one draws nothing and says so once. */
+  async open(): Promise<void> {
     this.run();
-    // Listed where the map table lists it (sky, middle); otherwise taken by
-    // pack name, as on the build most people run.
-    const zone = await this.selectionZone(mapName);
-    const ground: Ground = zone
-      ? {
-          mapId: zone.mapId,
-          // A world the map tables never named: ask by its pack, not map id.
-          world: zone.world,
-          middle: zone.centre,
-          sky: zone.atmosphere.skybox ?? skyOf(mapName),
-          hill: zone.atmosphere.skyHill ?? hillOf(mapName),
-        }
-      : { mapId: -1, world: mapName, middle: [0, 0], sky: skyOf(mapName), hill: hillOf(mapName) };
-
-    if (ground.sky) await this.addSky(ground.sky);
-    if (ground.hill) await this.addSky(ground.hill, true);
-
-    // Look for the dais: on this build the zone's middle is in the woods four tiles away.
-    const found = await this.findDais(ground);
-    if (this.closed) return;
-    if (!found) {
+    let ground: SelectionGround;
+    try {
+      ground = await this.resources.selectionGround();
+    } catch (error) {
+      if (this.closed) return;
       log.once(
         'warn',
-        `selection:dais:${mapName}`,
-        `nothing in ${mapName} names a dais to stand a character on`,
+        'selection:ground',
+        `no selection ground to stand a character on: ${String(error)}`,
       );
       this.saySo();
       return;
     }
+    if (this.closed) return;
+
+    await this.addSky(ground.sky);
+    await this.addSky(ground.hill, true);
 
     const tiles: TileData[] = [];
-    for (let x = found.tile[0] - TILES_OUT; x <= found.tile[0] + TILES_OUT; x++) {
-      for (let z = found.tile[1] - TILES_OUT; z <= found.tile[1] + TILES_OUT; z++) {
+    for (let x = ground.tile[0] - TILES_OUT; x <= ground.tile[0] + TILES_OUT; x++) {
+      for (let z = ground.tile[1] - TILES_OUT; z <= ground.tile[1] + TILES_OUT; z++) {
         const tile = await this.resources.tile(ground.mapId, x, z, ground.world).catch(() => null);
         if (tile) tiles.push(tile);
       }
@@ -207,13 +169,18 @@ export class SelectionScene {
 
     for (const tile of tiles) this.addGround(tile);
 
-    // The dais last: it says where the character stands and how high.
-    const everything = tiles.flatMap(tile => tile.placements);
-    const daisOf = (one: Placement): boolean => one === found.dais;
-    for (const placement of everything.filter(one => !daisOf(one))) {
-      await this.addPlacement(placement, false);
+    // The dais last: it says where the character stands and how high. The
+    // tile's own copy of it is the one left out.
+    const [sx, sy, sz] = ground.stand.position;
+    const isTheDais = (one: Placement): boolean =>
+      one.model === ground.stand.model &&
+      one.position[0] === sx &&
+      one.position[1] === sy &&
+      one.position[2] === sz;
+    for (const placement of tiles.flatMap(tile => tile.placements)) {
+      if (!isTheDais(placement)) await this.addPlacement(placement, false);
     }
-    await this.addPlacement(found.dais, true);
+    await this.addPlacement(ground.stand, true);
     this.frameCamera();
   }
 
@@ -515,43 +482,6 @@ export class SelectionScene {
     );
   }
 
-  private async selectionZone(mapName: string): Promise<ZoneInfo | null> {
-    const index = await this.resources.zoneIndex().catch(() => null);
-    if (!index) return null;
-    const wanted = mapName.toLowerCase();
-    const on = index.zones.filter(zone => zone.mapName.toLowerCase() === wanted);
-    if (!on.length) return null;
-    // Where a map has several zones, the one with scenery.
-    return on.find(zone => zone.hasScenery) ?? on[0];
-  }
-
-  /**
-   * The dais: a placement named after the map (`human_selection.bdae`). This
-   * map has two and one is hemmed in by houses, so every ring is searched and
-   * the one with room wins.
-   */
-  private async findDais(
-    ground: Ground,
-  ): Promise<{ dais: Placement; tile: [number, number] } | null> {
-    const named = (ground.world ?? this.mapName).toLowerCase();
-    const middle: [number, number] = [
-      Math.floor(ground.middle[0] / TILE_SIZE),
-      Math.floor(ground.middle[1] / TILE_SIZE),
-    ];
-    const candidates: DaisStanding[] = [];
-    for (let out = 0; out <= LOOK_OUT; out++) {
-      for (const [x, z] of ring(middle, out)) {
-        const tile = await this.resources.tile(ground.mapId, x, z, ground.world).catch(() => null);
-        if (this.closed) return null;
-        if (!tile) continue;
-        for (const dais of tile.placements.filter(one => named_(one.model).startsWith(named))) {
-          candidates.push({ dais, tile: [x, z], near: tile.placements });
-        }
-      }
-    }
-    return clearestStand(candidates, ground.middle);
-  }
-
   /** A floor's height by raycasting down; the box would reach whatever stands on it. */
   private floorOf(object: THREE.Object3D, x: number, z: number, box: THREE.Box3): number {
     const above = Number.isFinite(box.max.y) ? box.max.y + 1 : (object.position.y ?? 0) + 1;
@@ -757,51 +687,4 @@ export class SelectionScene {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
-}
-
-function named_(model: string): string {
-  const base = model.toLowerCase().split('/').pop() ?? model.toLowerCase();
-  return base.replace(/\.[^.]*$/, '');
-}
-
-/** A dais the map holds, with whatever else stands on its tile. */
-export interface DaisStanding {
-  dais: Placement;
-  tile: [number, number];
-  near: readonly Placement[];
-}
-
-/** The dais with the fewest things crowding it; ties go to the one nearer the middle. */
-export function clearestStand(
-  candidates: readonly DaisStanding[],
-  middle: readonly number[] | number[],
-): { dais: Placement; tile: [number, number] } | null {
-  let best: { found: DaisStanding; crowd: number; away: number } | null = null;
-  for (const found of candidates) {
-    const crowd = found.near.filter(
-      one => one !== found.dais && flatApart(one, found.dais) < ELBOW_ROOM,
-    ).length;
-    const away = Math.hypot(found.dais.position[0] - middle[0], found.dais.position[2] - middle[1]);
-    if (!best || crowd < best.crowd || (crowd === best.crowd && away < best.away)) {
-      best = { found, crowd, away };
-    }
-  }
-  return best ? { dais: best.found.dais, tile: best.found.tile } : null;
-}
-
-function flatApart(one: Placement, other: Placement): number {
-  return Math.hypot(one.position[0] - other.position[0], one.position[2] - other.position[2]);
-}
-
-/** The ring of tiles exactly `out` from the middle, for an outward search. */
-function ring(middle: [number, number], out: number): Array<[number, number]> {
-  if (out === 0) return [middle];
-  const [cx, cz] = middle;
-  const tiles: Array<[number, number]> = [];
-  for (let x = cx - out; x <= cx + out; x++) {
-    for (let z = cz - out; z <= cz + out; z++) {
-      if (Math.max(Math.abs(x - cx), Math.abs(z - cz)) === out) tiles.push([x, z]);
-    }
-  }
-  return tiles;
 }

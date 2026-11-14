@@ -75,8 +75,6 @@ const STAGE = (params.get('stage') ?? 'signIn') as FrontStage;
 /** The race and sex a draft starts as, for opening a later step on another body. */
 const RACE = Number(params.get('race') ?? 0);
 const GENDER = Number(params.get('gender') ?? 0);
-/** Which map to stand on; the other one is `mendel_selection`. */
-const MAP = params.get('map') ?? 'human_selection';
 
 /**
  * One real starting kit, for looking at gear on the bench: a robe, a
@@ -428,7 +426,7 @@ function Bench(): JSX.Element {
           // Dev only: the scene itself, so a question about what is
           // drawn can be asked of it rather than of a photograph.
           (globalThis as Record<string, unknown>).__selection = scene;
-          void scene.open(MAP).then(() => {
+          void scene.open().then(() => {
             if (wanted) void show(wanted);
             document.body.setAttribute('data-ready', 'yes');
           });

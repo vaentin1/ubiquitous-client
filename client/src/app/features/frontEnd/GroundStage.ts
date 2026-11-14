@@ -14,8 +14,6 @@ import { previewAppearanceFor } from './previewAppearance';
 
 const log = logger('ground');
 
-const SELECTION_MAP = 'human_selection';
-
 /** What the screens ask of the ground behind them. */
 export type Ground = Pick<
   SelectionScene,
@@ -51,7 +49,7 @@ export class GroundStage {
     const ground = this.makeGround(canvas);
     this.ground = ground;
     ground.watch(this.view);
-    void ground.open(SELECTION_MAP);
+    void ground.open();
     if (this.wantedLook) void this.show(this.wantedLook);
     const waiting = [...this.wantedPortraits.values()];
     this.wantedPortraits.clear();

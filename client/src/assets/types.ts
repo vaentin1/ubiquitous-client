@@ -278,6 +278,21 @@ export interface ZoneIndex {
   zones: ZoneInfo[];
 }
 
+/** The ground the screens before the world stand on, and where on it a character stands. */
+export interface SelectionGround {
+  /** The map row it is listed under, or -1 for a world no row names. */
+  mapId: number;
+  /** The world by pack name, where no map row names it. */
+  world?: string;
+  /** The placement a character is stood on. */
+  stand: Placement;
+  /** The tile the stand is on, to load the ground around. */
+  tile: [number, number];
+  /** The dome and its horizon layer. */
+  sky: string;
+  hill: string;
+}
+
 /** One terrain tile; `heights` is `side * side`, row-major, from `origin` at the minimum corner. */
 export interface TerrainTileData {
   tile: [number, number];
@@ -808,6 +823,7 @@ export interface ResourceTypes {
   soundClip: SoundClipData;
   unitSounds: UnitSounds | null;
   zoneIndex: ZoneIndex;
+  selectionGround: SelectionGround;
   mountList: MountRow[];
   generalSpells: GeneralSpells;
   teleportStops: TeleportStop[];

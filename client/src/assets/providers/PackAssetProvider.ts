@@ -10,7 +10,9 @@ import type {
   EquipmentAttachment,
   ModelData,
   NetworkAppearance,
+  Placement,
   ResourceTypes,
+  SelectionGround,
   SkeletonData,
   SoundClipData,
   TextureData,
@@ -57,12 +59,16 @@ import { listCachedBuilds, type ProgressFn } from '../vfs/PackStore';
 import {
   UNLISTED_WORLD_ID,
   buildZone,
+  itmRotation,
   mapPackName,
+  placementScale,
   unlistedWorlds,
   worldStem,
   zoneInfoOf,
 } from './localZone';
 import { MapSpawns, buildTile, type ModelBounds } from './localTile';
+import { type StandCandidate, resolveGround, selectionWorlds } from './localSelection';
+import { isDrawableModel, isEffect } from './surface';
 import { buildEffect } from './localEffect';
 import { readBeff } from '../formats/beff';
 import { decodeSound } from '../formats/sound';
@@ -70,7 +76,7 @@ import { parseSwf, swfPathToSvg, type SwfMovie } from '../formats/swf';
 import { readTypefaceFamily } from '../formats/typeface';
 import { facesByUse, pickUiFaces } from './uiFaces';
 import { readUiStrings } from '../formats/uiStrings';
-import { layerName } from '../formats/terrain';
+import { layerName, parseItm } from '../formats/terrain';
 import { readBdae, toAnimationData, toModelData, toSkeletonData } from './localModel';
 import { interiorOf, withoutSharedFaces } from './interiorCompanion';
 import { retainBuffers } from '../transferables';
@@ -426,6 +432,8 @@ export class PackAssetProvider implements AssetProvider {
     switch (target.kind) {
       case 'zoneIndex':
         return (await this.loadZoneIndex()) as ResourceTypes[K];
+      case 'selectionGround':
+        return (await this.loadSelectionGround()) as ResourceTypes[K];
       case 'creatureName':
         return (await this.creatureName(target.id)) as ResourceTypes[K];
       case 'creatureEntryName':
@@ -1181,6 +1189,55 @@ export class PackAssetProvider implements AssetProvider {
     const zones: ZoneInfo[] = tables.zones(names).map(zoneInfoOf);
     // Worlds the tables never name, such as the selection map.
     return { zones: [...zones, ...unlistedWorlds(tables, this.lib())] };
+  }
+
+  /** The first selection world whose pack holds a stand (`resolveGround`). */
+  private async loadSelectionGround(): Promise<SelectionGround> {
+    const tables = await this.worldTables();
+    const unlisted = unlistedWorlds(tables, this.lib());
+    const zones = (await this.loadZoneIndex()).zones.filter(zone => zone.mapId >= 0);
+    for (const world of selectionWorlds(tables.maps(), unlisted)) {
+      const tiles = await this.standCandidates(world.stem);
+      const ground = tiles.length ? resolveGround(world, tiles, zones) : null;
+      if (ground) return ground;
+    }
+    throw new ResourceNotFoundError('selectionGround', 'no selection ground holds a stand');
+  }
+
+  /** Every `.itm` placement in a world's pack, each with the rest of its tile. */
+  private async standCandidates(stem: string): Promise<StandCandidate[]> {
+    if (!this.lib().hasPack(`${stem}.bin`)) return [];
+    const pack = await this.lib()
+      .pack(`${stem}.bin`)
+      .catch(() => null);
+    if (!pack) return [];
+    const named = new RegExp(`^world/${stem}/items/(-?\\d+)_(-?\\d+)\\.itm$`, 'i');
+    const found: StandCandidate[] = [];
+    for (const entry of pack.entries) {
+      const at = named.exec(entry.name);
+      if (!at) continue;
+      let doc;
+      try {
+        doc = parseItm(await pack.read(entry));
+      } catch {
+        continue;
+      }
+      // Positions are relative to the header's own tile, as `buildTile` reads them.
+      const ox = doc.tile[0] * TILE_SIZE;
+      const oz = doc.tile[1] * TILE_SIZE;
+      const shown = doc.items.filter(item => isEffect(item.model) || isDrawableModel(item.model));
+      const near: Placement[] = shown.map(item => ({
+        model: item.model,
+        position: [ox + item.pos[0], item.pos[1], oz + item.pos[2]],
+        rotation: itmRotation(item.rot),
+        scale: placementScale(item.scale),
+        entry: 0,
+        kind: isEffect(item.model) ? 'effect' : 'scenery',
+      }));
+      const tile: [number, number] = [Number(at[1]), Number(at[2])];
+      for (const stand of near) found.push({ stand, tile, near });
+    }
+    return found;
   }
 
   private async unlistedWorld(zoneId: number): Promise<ZoneInfo | null> {
