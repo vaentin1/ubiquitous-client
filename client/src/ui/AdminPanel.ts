@@ -124,7 +124,7 @@ export class AdminPanel {
 
         <label class="${LABEL}">Level</label>
         <div class="${ROW}">
-          <input type="number" id="adm-level" min="1" max="60" value="60" class="${FIELD}">
+          <input type="number" id="adm-level" min="1" value="60" class="${FIELD}">
           <button id="adm-level-set" class="${BUTTON}">Set</button>
         </div>
         <label class="${CHECK}"><input type="checkbox" id="adm-invincible"> Invincible (until you leave the world)</label>

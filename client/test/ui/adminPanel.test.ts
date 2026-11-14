@@ -231,6 +231,11 @@ describe('AdminPanel against AdminControls', () => {
       expect(game.setLevel).toHaveBeenCalledWith(35);
     });
 
+    it("leaves the level's ceiling to the server, since 4.2.2 goes past 1.1.4's 60", async () => {
+      await open();
+      expect($<HTMLInputElement>('adm-level').max).toBe('');
+    });
+
     it('asks to learn every spell', async () => {
       const game = await open();
       $<HTMLButtonElement>('adm-learn').click();
