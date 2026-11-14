@@ -93,8 +93,19 @@ export class MoveSounds {
     if (pace === 'swim') return [facts.underwater ? 'sfx_mc_swim_underwater_1' : 'sfx_mc_swim_1'];
     const underfoot = facts.wading ? 'water' : facts.surface;
     if (facts.mount === null) return [`sfx_mc_footstep_${underfoot}_1`];
+    const m = facts.mount;
     const gait = pace === 'walk' ? 'footsteps_slow_' : 'footstep_';
-    return [`${facts.mount}${gait}${underfoot}_1`, `${facts.mount}footstep_${underfoot}_1`];
+    // Later mounts ship less: some files unnumbered, some for the ground
+    // alone, some one plain footstep. Each is tried in turn, the gait before
+    // the surface (own choice).
+    const names = [`${m}${gait}${underfoot}_1`, `${m}footstep_${underfoot}_1`];
+    names.push(`${m}${gait}${underfoot}`, `${m}footstep_${underfoot}`);
+    if (underfoot !== 'ground') {
+      names.push(`${m}${gait}ground_1`, `${m}footstep_ground_1`);
+      names.push(`${m}${gait}ground`, `${m}footstep_ground`);
+    }
+    names.push(`${m}${gait.slice(0, -1)}`, `${m}footstep`);
+    return [...new Set(names)];
   }
 
   /** Landing, or dropping into deep water. */
@@ -103,10 +114,19 @@ export class MoveSounds {
     if (facts.mount === null) {
       return [wet ? 'sfx_mc_enter_water' : `sfx_mc_jump_land_${facts.surface}_1`];
     }
-    // Mounts ship their water landing under one of two names.
-    return wet
-      ? [`${facts.mount}jump_land_water_1`, `${facts.mount}jump_land_swamp_1`]
-      : [`${facts.mount}jump_land_${facts.surface}_1`];
+    const m = facts.mount;
+    // Mounts ship their water landing under one of two names. A mount with
+    // no landing for where it came down lands as on the ground, then with
+    // its one plain landing, as its footsteps do (own choice).
+    const names = wet ? [`${m}jump_land_water_1`, `${m}jump_land_swamp_1`] : [];
+    names.push(`${m}jump_land_${facts.surface}_1`, `${m}jump_land_${facts.surface}`);
+    names.push(
+      `${m}jump_land_ground_1`,
+      `${m}jump_land_ground`,
+      `${m}jump_land_1`,
+      `${m}jump_land`,
+    );
+    return [...new Set(names)];
   }
 }
 

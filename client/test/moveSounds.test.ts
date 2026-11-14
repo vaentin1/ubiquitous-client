@@ -60,11 +60,47 @@ describe('MoveSounds', () => {
       ['sfx_mc_footstep_wood_1'],
     ]);
     expect(run(new MoveSounds(), facts({ moving: true, mount: 'sfx_hoof_' }), 0.1)).toEqual([
-      ['sfx_hoof_footstep_ground_1', 'sfx_hoof_footstep_ground_1'],
+      ['sfx_hoof_footstep_ground_1', 'sfx_hoof_footstep_ground', 'sfx_hoof_footstep'],
     ]);
     expect(
       run(new MoveSounds(), facts({ moving: true, backward: true, mount: 'sfx_pad_' }), 0.1),
-    ).toEqual([['sfx_pad_footsteps_slow_ground_1', 'sfx_pad_footstep_ground_1']]);
+    ).toEqual([
+      [
+        'sfx_pad_footsteps_slow_ground_1',
+        'sfx_pad_footstep_ground_1',
+        'sfx_pad_footsteps_slow_ground',
+        'sfx_pad_footstep_ground',
+        'sfx_pad_footsteps_slow',
+        'sfx_pad_footstep',
+      ],
+    ]);
+  });
+
+  it('steps a mount with no feet for where it is as on the ground', () => {
+    expect(
+      run(new MoveSounds(), facts({ moving: true, surface: 'wood', mount: 'sfx_hoof_' }), 0.1),
+    ).toEqual([
+      [
+        'sfx_hoof_footstep_wood_1',
+        'sfx_hoof_footstep_wood',
+        'sfx_hoof_footstep_ground_1',
+        'sfx_hoof_footstep_ground',
+        'sfx_hoof_footstep',
+      ],
+    ]);
+    expect(
+      new MoveSounds().step(facts({ landed: true, surface: 'wood', mount: 'sfx_hoof_' }), 1 / 60)
+        .sounds,
+    ).toEqual([
+      [
+        'sfx_hoof_jump_land_wood_1',
+        'sfx_hoof_jump_land_wood',
+        'sfx_hoof_jump_land_ground_1',
+        'sfx_hoof_jump_land_ground',
+        'sfx_hoof_jump_land_1',
+        'sfx_hoof_jump_land',
+      ],
+    ]);
   });
 
   it('strokes while swimming, differently under the surface', () => {
@@ -100,9 +136,11 @@ describe('MoveSounds', () => {
     s.step(facts({ locomotion: 'air' }), 1 / 60);
     expect(s.step(facts({ locomotion: 'swim' }), 1 / 60).sounds).toEqual([['sfx_mc_enter_water']]);
     const m = new MoveSounds();
-    expect(m.step(facts({ landed: true, wading: true, mount: 'sfx_pad_' }), 1 / 60).sounds).toEqual(
-      [['sfx_pad_jump_land_water_1', 'sfx_pad_jump_land_swamp_1']],
-    );
+    expect(
+      m
+        .step(facts({ landed: true, wading: true, mount: 'sfx_pad_' }), 1 / 60)
+        .sounds[0].slice(0, 2),
+    ).toEqual(['sfx_pad_jump_land_water_1', 'sfx_pad_jump_land_swamp_1']);
   });
 });
 

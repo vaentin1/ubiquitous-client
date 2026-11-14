@@ -3797,6 +3797,28 @@ describe.skipIf(!SOUND)('sound.bin, from the user packs', () => {
   }, 900_000);
 });
 
+/**
+ * What 4.2.2's catalogue has no sound for under any name the rules try: it
+ * has no paper pick-up, its rose and fish mounts ship footsteps but no
+ * landing, and its snow dragon ships only a jump.
+ */
+const SILENT_IN_422 = [
+  'sfx_ui_pickup_paper',
+  ...['rose', 'fish'].flatMap(m =>
+    ['ground', 'water', 'wood'].map(s => `sfx_${m}_jump_land_${s}_1`),
+  ),
+  ...[
+    'jump_land_ground_1',
+    'jump_land_water_1',
+    'footstep_ground_1',
+    'footstep_water_1',
+    'footsteps_slow_ground_1',
+    'jump_land_wood_1',
+    'footstep_wood_1',
+    'footsteps_slow_wood_1',
+  ].map(name => `sfx_snowdragon_${name}`),
+];
+
 describe.skipIf(!SOUND || !TABLES)('the sound tables, against sound.bin', () => {
   async function load(): Promise<{ tables: WorldTables; sounds: PackReader }> {
     const tablePack = await PackReader.open(await fileSource(TABLES!), 'tables.bin');
@@ -3928,8 +3950,13 @@ describe.skipIf(!SOUND || !TABLES)('the sound tables, against sound.bin', () => 
       );
     }
 
-    const silent = wanted.filter(choice => !choice.some(name => index.byName.has(name)));
-    expect([...new Set(silent.map(choice => choice.join(' | ')))]).toEqual([]);
+    // Names are looked up as the engine looks them up, whatever their case.
+    const silent = wanted.filter(
+      choice => !choice.some(name => index.byName.has(name.toLowerCase())),
+    );
+    expect([...new Set(silent.map(choice => choice[0]))]).toEqual(
+      is422(tables) ? SILENT_IN_422 : [],
+    );
   }, 120_000);
 
   it('gives bodies voices that point at real sounds', async () => {
