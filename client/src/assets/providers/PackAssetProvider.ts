@@ -83,6 +83,8 @@ const SOUND_PACK = 'sound.bin';
 
 /** Every interface movie, the set whose text fields decide the typefaces. */
 const UI_MOVIES: readonly UiMovie[] = ['LGM', 'IGM', 'store'];
+/** 1.1.4 keeps the interface movies in `res.bin`; 4.2.2 moved them to `res_t.bin`. */
+const UI_MOVIE_PACKS = ['res.bin', 'res_t.bin'];
 
 /**
  * A resource kind this provider cannot serve, unlike `ResourceNotFoundError`
@@ -800,7 +802,7 @@ export class PackAssetProvider implements AssetProvider {
   /** One interface movie (`ui/<Movie>.swf`) in interface terms; bitmaps resolve through `uiIcon`. */
   async loadUiSkin(movie: string): Promise<UiSkinData> {
     const lib = this.lib();
-    const bytes = await lib.readFirst(['res.bin'], `ui/${movie}.swf`);
+    const bytes = await lib.readFirst(UI_MOVIE_PACKS, `ui/${movie}.swf`);
     if (!bytes) throw new ResourceNotFoundError(`uiSkin:${movie}`);
     let parsed: SwfMovie;
     try {
@@ -886,7 +888,7 @@ export class PackAssetProvider implements AssetProvider {
     const lib = this.lib();
     const movies: SwfMovie[] = [];
     for (const movie of UI_MOVIES) {
-      const bytes = await lib.readFirst(['res.bin'], `ui/${movie}.swf`);
+      const bytes = await lib.readFirst(UI_MOVIE_PACKS, `ui/${movie}.swf`);
       if (!bytes) continue;
       try {
         movies.push(await parseSwf(bytes));

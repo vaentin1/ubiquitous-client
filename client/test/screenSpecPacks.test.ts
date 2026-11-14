@@ -82,10 +82,12 @@ beforeAll(async () => {
   for (const [build, pack] of BUILDS) {
     const provider = new PackAssetProvider();
     const file = new File([await openAsBlob(pack)], 'res.bin');
-    const tablesAt = join(dirname(pack), 'tables.bin');
-    const tables = existsSync(tablesAt)
-      ? [new File([await openAsBlob(tablesAt)], 'tables.bin')]
-      : [];
+    // A build may keep its interface movies in `res_t.bin` rather than `res.bin`.
+    const tables: File[] = [];
+    for (const name of ['tables.bin', 'res_t.bin']) {
+      const at = join(dirname(pack), name);
+      if (existsSync(at)) tables.push(new File([await openAsBlob(at)], name));
+    }
     await provider.useSource(provider.offer([file, ...tables]).id);
     const talents = await provider.load(talentsId()).catch(() => null);
     const movies = new Map<UiMovie, UiSkinData>();

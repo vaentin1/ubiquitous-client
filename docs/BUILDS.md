@@ -8,7 +8,7 @@ The client and the server are built against **1.1.4**. Other builds can be suppo
 |---|---|---|
 | 1.1.4 | Primary | Everything here is built and checked against it: screens, formats, server data. |
 | 2.2.0 | Partial | Maps, zones and terrain load. No sign-in form shows (only the 3D scene), so the game cannot be entered. Ground textures and a few models the maps name are absent from the build; the warnings for them are expected. |
-| 4.2.2 | Partial | 2026-11-14: packs open; members stored with LZMA (method 14) decode, every one in `res.bin` and `tables.bin` checked against its CRC-32. Not yet checked: the interface movies (`ui/IGM.swf` is not in `res.bin`), table column layouts, and the screens. |
+| 4.2.2 | Partial | 2026-11-14: packs open; members stored with LZMA (method 14) decode, every one in `res.bin` and `tables.bin` checked against its CRC-32. The interface movies (`IGM`, `LGM`, `store`) are in `res_t.bin`, not `res.bin`, and parse; the hero frame reads from them. Not yet checked: table column layouts, and most screens. |
 | 1.0.2 | Partial | Particle effects are version 7, which the reader does not know, so effects and the scenery drawn by effects are skipped. |
 
 Status words: **Primary** (built against), **Verified** (named areas checked, listed), **Partial** (some areas work, listed), **Untested**. Add a row per build with what was actually checked, and the date.
