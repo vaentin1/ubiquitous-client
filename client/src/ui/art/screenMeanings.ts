@@ -706,6 +706,18 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
       // be pressed; here it always can.
       'btnClose/maskOff',
     ],
+    // Stickers, the shop and its currency.
+    later: {
+      hidden: [
+        'StickerBuySlot',
+        'sticker_slot',
+        'txtStickerTitle',
+        'btnSlotRight',
+        'btnGetMore',
+        'btnstore',
+        'storestone',
+      ],
+    },
   },
 
   chatSay: { dialog: 'DlgChatControl', calls: CHANNEL_CALLS },
@@ -956,6 +968,28 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
         kind => `page5/scroll/defenseres${kind}num`,
       ),
     ],
+    // The achievements and titles pages, their tabs, the help cards, the
+    // four places round the body for what only later builds wear, and a
+    // fourth meter with its words.
+    later: {
+      hidden: [
+        'btnPage3',
+        'btnPage4',
+        'textPage3',
+        'textPage4',
+        'achievement',
+        'equip/btninformation',
+        'property/btninformation',
+        'equip/btn17',
+        'equip/btn18',
+        'equip/btn19',
+        'equip/btn20',
+        'page1/basicragea1',
+        'page1/power',
+        'page1/mpowerestore',
+        'page1/roleclass01',
+      ],
+    },
   },
 
   held: {
@@ -1285,6 +1319,8 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
     },
     formats: { rank: '@1094?~ac9b9e2799f26ce3~4' },
     hidden: ['panelRiding', 'TalentType', 'textHelp'],
+    // The help card.
+    later: { hidden: ['btninformation'] },
   },
 
   social: {

@@ -82,6 +82,37 @@ describe('ArtOptionsWindow', () => {
     expect(column?.style.top).toBe('25%');
   });
 
+  it('stands the column by its slider, where it also holds a control parked off to one side', () => {
+    const spec = {
+      dialog: 'dlgPage',
+      frame: 'btnempty',
+      panels: { scroll: 'column', window: 'window', quality: 'column/btnFirst' },
+      actions: { 'column/btnFirst': 'music' },
+    };
+    uiSpec.value = { screens: { options: spec } };
+    setMovie({ skin: skin(), art: new Map() });
+    const plain = render(<ArtOptionsWindow onClose={() => {}} />);
+    // Laid out as the column with nothing beside it is: by its corner.
+    expect(plain.container.querySelector<HTMLElement>('.will-change-transform')?.style.left).toBe(
+      '10%',
+    );
+    cleanup();
+
+    // The same column with a control parked 100 units left of the slider:
+    // the column's picture starts there, so it stands 90 units left of the
+    // window, and the slider stays 10 in from the window's corner.
+    const parked = skin();
+    parked.sprites[0]!.frames[0]!.push(place(13, -100, 0, 'btnParked'));
+    setMovie({ skin: parked, art: new Map() });
+    const { container } = render(<ArtOptionsWindow onClose={() => {}} />);
+    const column = container.querySelector<HTMLElement>('.will-change-transform');
+    expect(column?.style.left).toBe('-90%');
+    expect(column?.style.top).toBe('25%');
+    // As wide as its picture, which the window shows only part of.
+    const picture = column?.querySelector<HTMLElement>('img');
+    expect(column?.style.width).toBe(picture?.style.width);
+  });
+
   it('adds a row below the last switch for each setting the column has no switch for', () => {
     // Two switch rows, 30 units apart, each with the field its words go in.
     const rows = skin();

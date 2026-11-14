@@ -22,8 +22,8 @@ export interface UiSpriteSpec {
   /** Instance name of a placement in the movie that draws the sprite. */
   instance: string;
   /**
-   * The sheet the sprite is cut from, or the sheets builds differ on; an
-   * instance filled from any other is not it.
+   * The sheet the sprite is cut from, or the sheets builds differ on, the
+   * one to prefer first; an instance filled from any other is not it.
    */
   sheet: string | readonly string[];
 }
@@ -117,17 +117,26 @@ function inside(rect: SpriteRect, image: ImageBitmap): boolean {
 /** How many units of a bitmap fill's matrix draw one pixel of its sheet at 1:1. */
 const FILL_UNITS_PER_PIXEL = 20;
 
-/** A sprite's rect on its sheet, from the first placement filling it: the shape's bounds back through the fill matrix. */
+/**
+ * A sprite's rect on its sheet, from the first placement filling it: the
+ * shape's bounds back through the fill matrix. Of several sheets, the
+ * first the movie fills the instance from is the one taken.
+ */
 export function locateSprite(movie: UiSkinData, spec: UiSpriteSpec): SpriteFound | null {
+  const sheets: readonly string[] = typeof spec.sheet === 'string' ? [spec.sheet] : spec.sheet;
+  for (const sheet of sheets) {
+    const found = locateOn(movie, spec.instance, sheet);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** The first placement of `instance` filled from `sheet`, as a rect on that sheet. */
+function locateOn(movie: UiSkinData, instance: string, sheet: string): SpriteFound | null {
   const shapes = new Map(movie.shapes.map(shape => [shape.id, shape]));
   const sprites = new Map(movie.sprites.map(sprite => [sprite.id, sprite]));
-  const sheets: readonly string[] = typeof spec.sheet === 'string' ? [spec.sheet] : spec.sheet;
   const fromSheet = (fill: UiSkinFill): fill is Extract<UiSkinFill, { kind: 'bitmap' }> =>
-    fill.kind === 'bitmap' &&
-    fill.art !== null &&
-    sheets.includes(fill.art) &&
-    fill.matrix.a > 0 &&
-    fill.matrix.d > 0;
+    fill.kind === 'bitmap' && fill.art === sheet && fill.matrix.a > 0 && fill.matrix.d > 0;
 
   const find = (characterId: number, depth: number): SpriteFound | null => {
     const shape = shapes.get(characterId);
@@ -137,7 +146,7 @@ export function locateSprite(movie: UiSkinData, spec: UiSpriteSpec): SpriteFound
       const kx = FILL_UNITS_PER_PIXEL / fill.matrix.a;
       const ky = FILL_UNITS_PER_PIXEL / fill.matrix.d;
       return {
-        sheet: fill.art!,
+        sheet,
         x: Math.round((shape.bounds.x - fill.matrix.tx) * kx),
         y: Math.round((shape.bounds.y - fill.matrix.ty) * ky),
         w: Math.round(shape.bounds.w * kx),
@@ -157,7 +166,7 @@ export function locateSprite(movie: UiSkinData, spec: UiSpriteSpec): SpriteFound
   const lists = [...movie.root.slice(0, 1), ...movie.sprites.map(sprite => sprite.frames[0] ?? [])];
   for (const list of lists) {
     for (const placed of list) {
-      if (placed.name !== spec.instance || placed.characterId === null) continue;
+      if (placed.name !== instance || placed.characterId === null) continue;
       const found = find(placed.characterId, 0);
       if (found) return found;
     }

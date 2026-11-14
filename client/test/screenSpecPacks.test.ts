@@ -1091,7 +1091,6 @@ describe.skipIf(!BUILDS.size)('the HUD frames, against the player’s builds', (
     };
     let ornamented = 0;
     for (const [build, one] of read) {
-      if (!backed(one)) continue;
       const skin = one.movies.get('IGM')!;
       const spec = one.built.spec.screens.playerFrame!;
       const parts = partsOf(one, SCREEN_MEANINGS.playerFrame!)!;

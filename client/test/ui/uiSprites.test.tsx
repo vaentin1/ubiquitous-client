@@ -128,6 +128,18 @@ describe('finding a sprite in the player’s movie', () => {
       w: 19,
       h: 19,
     });
+    // Where the movie fills it from both, the first sheet named wins,
+    // whichever placement comes first.
+    const both = movie({
+      iconGold: { sheet: elsewhere, x: 4, y: 6, w: 19, h: 19 },
+      other: { sheet: ICONS, x: 70, y: 80, w: 19, h: 19 },
+    });
+    both.sprites.push({
+      id: 3,
+      frameCount: 1,
+      frames: [[{ depth: 1, characterId: 101, matrix: IDENTITY, name: 'iconGold', opacity: 1 }]],
+    });
+    expect(locateSprite(both, UI_SPRITES['coin-gold'])).toMatchObject({ sheet: ICONS, x: 70 });
     const read = vi.fn(async (_sheet: string, _movie: UiMovie) => sheet(1024, 1024));
     const found = await cutUiSprites(async () => film, read, describeCut, ['coin-gold']);
     expect(read.mock.calls.map(([name]) => name)).toEqual([elsewhere]);
