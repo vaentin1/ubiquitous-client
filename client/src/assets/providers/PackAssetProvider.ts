@@ -631,6 +631,8 @@ export class PackAssetProvider implements AssetProvider {
   async attachSource(file: File): Promise<void> {
     if (!this.library) throw new ProviderNotReadyError('no game data mounted');
     await this.library.attachIpa(file, this.onProgress);
+    // Finished from the file now, or each start asks for it again.
+    if (!this.library.isComplete) await this.extractAll();
   }
 
   async clearCache(): Promise<void> {

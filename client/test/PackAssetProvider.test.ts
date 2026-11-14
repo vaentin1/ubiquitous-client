@@ -12,6 +12,7 @@ import {
 } from '../src/assets/providers/PackAssetProvider';
 import { Library } from '../src/assets/vfs/Library';
 import { uiStringsId } from '../src/assets/ids';
+import { FakeDirectory, fakeStorage } from './helpers/fakeStorage';
 import { buildPack, buildPvr, buildTablesPack, buildUiStrings, text } from './helpers/fixtures';
 
 /**
@@ -555,6 +556,51 @@ describe('PackAssetProvider', () => {
     );
     await lib.warmTextureIndex();
     expect(lib.resolveTextureSync('texture/tent.tga')).toEqual(['res_t.bin', 'texture/tent.tga']);
+  });
+
+  it('stores what a reattached game file holds and records the build whole', async () => {
+    // A stored build missing `res_t.bin` asked for its game file on every
+    // start: packs read through the file were never written down as stored.
+    const { root, storage } = fakeStorage();
+    vi.stubGlobal('navigator', { storage });
+    try {
+      const packs = {
+        'res.bin': buildPack([{ name: 'a.txt', data: text('a'), deflate: true }]),
+        'tables.bin': buildPack([{ name: 'b.txt', data: text('b'), deflate: true }]),
+        'res_t.bin': buildPack([{ name: 'ui/IGM.swf', data: text('movie'), deflate: true }]),
+      };
+      // Deflated in the file, as a real one is, so extraction writes them out.
+      const deflated = buildPack(
+        Object.entries(packs).map(([name, data]) => ({
+          name: `Payload/Game.app/${name}`,
+          data,
+          deflate: true,
+        })),
+        0x04034b50,
+      );
+      const file = new File([deflated as BlobPart], 'game-4.2.2.ipa');
+      const key = `game-4.2.2.ipa-${file.size}`;
+      await (await Library.mount(file)).extractAll();
+
+      // The interrupted extraction: one pack and the record of a whole build gone.
+      const dir = (await (
+        await root.getDirectoryHandle('ubiquitous-packs')
+      ).getDirectoryHandle(key)) as FakeDirectory;
+      await dir.removeEntry('res_t.bin');
+      await dir.removeEntry('.extracted.json');
+
+      const stored = await Library.mountCached(key);
+      expect(stored.isComplete).toBe(false);
+      await stored.attachIpa(file);
+      await stored.extractAll();
+      expect(stored.isComplete).toBe(true);
+      expect(await stored.readFirst(['res_t.bin'], 'ui/IGM.swf')).toEqual(text('movie'));
+
+      // The next start finds it whole, with no file to ask for.
+      expect((await Library.mountCached(key)).isComplete).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('takes a renamed .ipa as the game file, by what it holds', async () => {

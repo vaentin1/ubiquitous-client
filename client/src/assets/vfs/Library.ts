@@ -97,7 +97,7 @@ export class Library {
   }
 
   /** Mount extracted packs directly, each under its own basename (registering all as `res.bin` would keep only the last). */
-  static async mountPacks(files: File[]): Promise<Library> {
+  static async mountPacks(files: File[], store?: PackStore): Promise<Library> {
     if (files.length === 0) throw new Error('no packs given');
 
     const total = files.reduce((n, f) => n + f.size, 0);
@@ -124,7 +124,7 @@ export class Library {
     // The first readable pack stands in as the container for `info()`; nothing
     // is ever materialised out of it, because these are already extracted.
     const first = [...readers.values()][0];
-    const lib = new Library(first, new PackStore(key), label, total);
+    const lib = new Library(first, store ?? new PackStore(key), label, total);
     for (const [name, reader] of readers) {
       lib.packs.set(name, reader);
       log.info(`${name}: ${reader.length} entries`);
@@ -198,7 +198,9 @@ export class Library {
       );
     }
 
-    const lib = await Library.mountPacks(files);
+    // Kept in the build's own storage: a manifest or typeface written later
+    // belongs beside these packs, not under a name made up from them.
+    const lib = await Library.mountPacks(files, store);
 
     // A manifest naming only packs that are actually here means the build was
     // extracted whole and the game file is not needed again. Anything else —
@@ -398,7 +400,14 @@ export class Library {
     opts: { skip?: readonly string[]; onPack?: (name: string, i: number, n: number) => void } = {},
   ): Promise<{ extracted: string[]; failed: string[] }> {
     const skip = new Set((opts.skip ?? []).map(n => n.toLowerCase()));
-    const names = this.packNames().filter(n => !skip.has(n));
+    // A stored build with its own game file attached finishes from the file:
+    // the packs storage lacks are written beside the rest. Another file's
+    // packs are kept under its own name and say nothing of this build.
+    const ipa = this.ipaFallback;
+    const sameBuild = ipa !== null && ipa.store.key === this.store.key;
+    const names = [...new Set([...this.packNames(), ...(sameBuild ? ipa.packNames() : [])])].filter(
+      n => !skip.has(n),
+    );
 
     // Nothing to extract *from*: this library was mounted over packs that are
     // already files. Claiming completeness here would write a manifest naming
@@ -446,7 +455,7 @@ export class Library {
 
     // Only a clean run may claim the build is finished — a manifest naming a
     // pack that is not there is worse than no manifest at all.
-    if (!failed.length) {
+    if (!failed.length && (ipa === null || sameBuild)) {
       await this.store.writeManifest(extracted);
       this.complete = true;
     }

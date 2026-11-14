@@ -182,14 +182,18 @@ export class UiArt {
   private readonly spellIconsAsked = new Set<number>();
   private readonly talentWordsAsked = new Set<number>();
 
+  private facesDrawn = false;
+
   /** Register the interface's own typefaces; the font tokens pick them up by name. */
   async loadUiFaces(): Promise<void> {
+    if (this.facesDrawn) return;
     const faces = await this.resources.uiFaces();
     if (!faces.body && !faces.title) {
       log.info('interface lettering: this build ships no typeface its movies name');
       return;
     }
     const took = await registerFaces(faces);
+    this.facesDrawn = took;
     log.info(
       `interface lettering: ${took ? 'drawn in' : 'could not read'} ` +
         [faces.body?.family, faces.title?.family].filter(Boolean).join(' and '),

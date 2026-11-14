@@ -1095,7 +1095,7 @@ export class Game {
 
       this.debug.install({
         selfNetworkId: () => this.selfNetworkId,
-        attachSource: file => this.local.attachSource(file),
+        attachSource: file => this.attachGameFile(file),
         lootSnapshot: () => ({
           states: [...this.lootAuras.recorded].map(([networkId, state]) => ({
             networkId,
@@ -1521,7 +1521,7 @@ export class Game {
           },
           { label: `Continue with ${stored.name}`, skipLabel: 'Carry on without it' },
         );
-        if (files.length) await this.local.attachSource(files[0]);
+        if (files.length) await this.attachGameFile(files[0]);
         else log.warn('extraction still unfinished — some maps may not load');
       } else {
         log.warn('extraction unfinished and no game file remembered');
@@ -3502,6 +3502,18 @@ export class Game {
     this.boot.hide();
   }
 
+  /**
+   * Attach the game file behind a stored build. What the interface read
+   * before it, when the stored build lacked the pack its movie or lettering
+   * live in, is read again: screens ask for their art only once.
+   */
+  private async attachGameFile(file: File): Promise<void> {
+    await this.local.attachSource(file);
+    void this.art.loadUiFaces().catch(err => log.warn('interface lettering failed', err));
+    void this.art.loadUiDialogs(wantedDialogs.value);
+    void this.art.drawUiPieces(wantedPieces.value);
+  }
+
   /** A build extracted without sound: ask once for the file, and remember a no. */
   private async offerSound(): Promise<void> {
     if (await this.local.hasSound()) return;
@@ -3517,7 +3529,7 @@ export class Game {
       { label: 'Choose game file...', skipLabel: 'Carry on without sound' },
     );
     if (files.length) {
-      await this.local.attachSource(files[0]);
+      await this.attachGameFile(files[0]);
       return;
     }
     try {
@@ -3546,7 +3558,7 @@ export class Game {
       { label: offer.label, skipLabel: offer.skipLabel },
     );
     if (!files.length) return false;
-    await this.local.attachSource(files[0]);
+    await this.attachGameFile(files[0]);
     return true;
   }
 
