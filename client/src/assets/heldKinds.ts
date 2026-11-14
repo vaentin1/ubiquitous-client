@@ -35,6 +35,10 @@ const WEAPON_KINDS: ReadonlyMap<number, HeldKind> = new Map([
   [16, 'bow'],
   [17, 'crossbow'],
   [20, 'wand'],
+  // Own choice: 4.2.2's thrown weapons (19) and covenants (21) fill the ranged
+  // slot as a wand does, and a wand already fights with the thrown clips.
+  [19, 'wand'],
+  [21, 'wand'],
 ]);
 
 const ARMOUR_KINDS: ReadonlyMap<number, HeldKind> = new Map([

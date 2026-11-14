@@ -31,6 +31,11 @@ describe('sorting what a hand holds', () => {
     expect(heldKind(WEAPON, 20)).toBe('wand');
   });
 
+  it('holds what 4.2.2 throws, and its covenants, as a wand', () => {
+    expect(heldKind(WEAPON, 19)).toBe('wand');
+    expect(heldKind(WEAPON, 21)).toBe('wand');
+  });
+
   it('knows the two things an off hand holds that are not weapons', () => {
     expect(heldKind(ARMOUR, 5)).toBe('shield');
     expect(heldKind(ARMOUR, 6)).toBe('trinket');
