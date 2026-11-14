@@ -1401,9 +1401,8 @@ export class WorldTables {
   }
 
   /**
-   * Column 25 alone marks a mount in 1.1.4 and 2.2.0, where every row that
-   * sets it seats its caster; 4.2.2 sets it on pets and other spells too, so
-   * the mount effect has to agree.
+   * Column 25 marks every mount, but 4.2.2 sets it on pets and spells used
+   * from items too, so the mount effect has to agree.
    */
   private isMount(row: Row): boolean {
     return num(row[MOUNT_KIND_COLUMN]) > 0 && this.mountOf(row) > 0;
