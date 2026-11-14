@@ -32,7 +32,7 @@ import sys
 # Extensions that are game data in any form, decoded or not.
 BANNED_EXT = {
     ".ipa", ".bin", ".bdae", ".tbl", ".tga", ".pvr", ".trn", ".msk", ".shw",
-    ".itm", ".wld", ".phy", ".beff", ".swf", ".wav", ".dds", ".ktx",
+    ".itm", ".wld", ".phy", ".beff", ".swf", ".wav", ".mpc", ".dds", ".ktx",
     ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".mp4", ".webm",
     ".pkm", ".astc", ".nav", ".terrain",
     # What else an unpacked .ipa holds: property lists, interface files,

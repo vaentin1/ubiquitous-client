@@ -65,7 +65,7 @@ import {
 import { MapSpawns, buildTile, type ModelBounds } from './localTile';
 import { buildEffect } from './localEffect';
 import { readBeff } from '../formats/beff';
-import { decodeWav } from '../formats/wav';
+import { decodeSound } from '../formats/sound';
 import { parseSwf, swfPathToSvg, type SwfMovie } from '../formats/swf';
 import { readTypefaceFamily } from '../formats/typeface';
 import { facesByUse, pickUiFaces } from './uiFaces';
@@ -80,6 +80,18 @@ const log = logger('pack-provider');
 
 /** The pack every sound file lives in. */
 const SOUND_PACK = 'sound.bin';
+
+/**
+ * The names a sound file may ship under, in the order to try: the one its
+ * table row gives, then the same name with the other coding's extension.
+ * 4.2.2 ships every sound as `.mpc` while most of its rows still name `.wav`.
+ */
+export function soundFileNames(path: string): string[] {
+  const ext = /\.(wav|mpc)$/i.exec(path);
+  if (!ext) return [path];
+  const other = ext[1].toLowerCase() === 'wav' ? 'mpc' : 'wav';
+  return [path, `${path.slice(0, ext.index)}.${other}`];
+}
 
 /** Every interface movie, the set whose text fields decide the typefaces. */
 const UI_MOVIES: readonly UiMovie[] = ['LGM', 'IGM', 'store'];
@@ -1133,10 +1145,14 @@ export class PackAssetProvider implements AssetProvider {
 
   /** One decoded sound; a build extracted before sounds were kept has none. */
   private async loadSoundClip(path: string): Promise<SoundClipData> {
-    const bytes = await this.lib().readFirst([SOUND_PACK], path);
+    let bytes: Uint8Array | null = null;
+    for (const name of soundFileNames(path)) {
+      bytes = await this.lib().readFirst([SOUND_PACK], name);
+      if (bytes) break;
+    }
     if (!bytes) throw new ResourceNotFoundError(`soundClip:${path}`, `no sound ${path}`);
     try {
-      return decodeWav(bytes);
+      return decodeSound(bytes);
     } catch (err) {
       throw new ResourceError(`soundClip:${path}`, `${path}: ${String(err)}`);
     }

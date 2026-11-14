@@ -1,9 +1,10 @@
-# Sound (`sound.bin`, `.wav`, and the sound tables)
+# Sound (`sound.bin`, `.wav`, `.mpc`, and the sound tables)
 
-Every sound file in `sound.bin` is RIFF/WAVE, and the
-tables in `tables.bin` say which file plays when. This page is what the
-client relies on, worked out by decoding every file in the user's own 2.2.0
-build and reading the tables beside it. Field names are this document's own.
+Every sound file in `sound.bin` is RIFF/WAVE up to 2.2.0; 4.2.2 ships
+Musepack SV8 instead. The tables in `tables.bin` say which file plays when.
+This page is what the client relies on, worked out by decoding every file in
+the user's own 2.2.0 and 4.2.2 builds and reading the tables beside them.
+Field names are this document's own.
 
 ## The pack
 
@@ -11,6 +12,12 @@ build and reading the tables beside it. Field names are this document's own.
 1,665 `.wav` files under `sound/`, all stored rather than deflated, and two
 `.beff` files. Names are lower case: `m_…` is music, `sfx_…` a sound effect,
 `vfx_…` a voice.
+
+In 4.2.2 it holds 3,454 `.mpc` files under `sound/` and 17 `.beff` files,
+and no `.wav`. 3,417 of the `.mpc` files are Musepack SV8 (they open with
+`MPCK`); the other 37, all `sfx_npc_…` voices, are RIFF/WAVE in Microsoft
+ADPCM under the `.mpc` name. None is Musepack SV7 (`MP+`). The client tells
+the two codings apart by those first four bytes, never by the name.
 
 ## WAV files
 
@@ -44,6 +51,47 @@ specifications:
 `realPacks.test.ts` decodes every file and checks that each coding reads as
 sound rather than noise.
 
+## Musepack SV8 files (4.2.2)
+
+The container is the public SV8 specification: the magic `MPCK`, then
+packets of a two-letter key (`A`-`Z`), a size and a payload. The size counts
+the key and itself and is written in groups of seven bits, high group first,
+the top bit of each byte set while another follows. Every shipped file holds
+`SH`, `RG`, `EI`, `SO`, the audio packets `AP`, `ST` and `SE`, in that order;
+14 carry a tag after `SE`, which the reader ignores.
+
+`SH`, the stream header, is a CRC-32 (PNG's) of the rest of the packet, then
+the version (8), the sample count and the leading silence (each sized like a
+packet size), then 16 bits, most significant first: sample rate (3 bits:
+44,100, 48,000, 37,800, 32,000 Hz), bands used less one (5), channels less
+one (4), mid/side stereo (1), and frames per audio packet as a power of four
+(3). In 4.2.2:
+
+| Rate      | Files | Mono  | Stereo |
+| --------- | ----- | ----- | ------ |
+| 32,000 Hz | 3,128 | 2,933 | 195    |
+| 44,100 Hz | 284   | 282   | 2      |
+| 48,000 Hz | 5     | 4     | 1      |
+
+Bands used are 31 (3,128 files), 28 (97), 26 (5) or 22 (187). Every file
+sets mid/side, packs 64 frames per `AP` and has no leading silence.
+
+A frame is 1,152 samples per channel, and each `AP`'s first frame stands on
+its own. The frames themselves (band resolutions, scale factors, quantised
+samples, then requantisation and a 32-band synthesis filter bank) are
+specified only by the reference decoder, libmpcdec r475, whose
+floating-point build `assets/formats/musepack.ts` ports. Output lags the
+stream by 481 samples, so decoding runs that far past the sample count and
+drops as many from the start, with the leading silence: a file gives exactly
+its sample count less its leading silence. Decoded output can pass full
+scale slightly; 3,305 of 914 million samples in 4.2.2 do, and the client
+clamps them to [-1, 1].
+
+`realPacks.test.ts` decodes every file and checks its length, rate and
+channels against its own header, and that it reads as sound rather than
+noise. Run locally against the reference decoder, every file in 4.2.2 came
+out the same length and within 7.2e-7 of it, sample for sample.
+
 ## `c_sound` — one row per sound
 
 `uuusfffuuuuuuuuuuu`, keyed by column 0. Every meaning below was read off
@@ -75,6 +123,11 @@ A sound with _n_ files names the first; the others are the same name with
 the number after the last underscore changed, `_1` to `_n`. A few rows leave
 off the `.wav`, and a few families skip a number (`_2` and `_3` shipped, `_1`
 not). 23 of 978 rows in 2.2.0 name files the build does not ship at all.
+
+4.2.2's 1,824 rows name 1,004 files `.wav`, 811 `.mpc` and 9 with no
+extension, while the pack ships only `.mpc`: a name that is not in the pack
+is tried again with the other extension, which finds 1,785 of the 1,824
+first files.
 
 ## `c_sound_bank` — kinds of sound
 

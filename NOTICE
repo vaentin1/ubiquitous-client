@@ -68,6 +68,14 @@ What a production build ships (client/dist/):
   License 1.1. The build copies the licence beside them, as
   assets/EB-Garamond-OFL.txt, and fails if it cannot.
 
+Ported into this source tree, and so shipped:
+
+- libmpcdec r475 (musepack_src_r475), the Musepack decoder library:
+  BSD-3-Clause, Copyright (c) 2005-2009, The Musepack Development Team.
+  client/src/assets/formats/musepack.ts ports its SV8 frame decoder. The
+  file opens with the licence in full, as a /*! @license */ comment that
+  the build keeps, word for word, in each bundle the decoder lands in.
+
 Used only to build and test, nothing of them ships: packages under MIT, ISC,
 BSD-2-Clause, BSD-3-Clause and Apache-2.0, plus:
 

@@ -14,7 +14,7 @@ This repository contains **only code we wrote**. Nothing extracted from the
 
 | Never commit | Includes |
 |---|---|
-| Extracted game assets | `.bdae`, `.tga`, `.tbl`, `.trn`, `.msk`, `.shw`, `.itm`, `.wld`, `.phy`, `.beff`, `.wav`, `.bin`, `.ipa` |
+| Extracted game assets | `.bdae`, `.tga`, `.tbl`, `.trn`, `.msk`, `.shw`, `.itm`, `.wld`, `.phy`, `.beff`, `.wav`, `.mpc`, `.bin`, `.ipa` |
 | Decoded copies of them | PNGs of game textures, JSON dumps of scenes/models/tables, extracted meshes |
 | Pictures of them | screenshots, render captures, GIFs, videos |
 | Third-party reference material | anything redistributed rather than written here |

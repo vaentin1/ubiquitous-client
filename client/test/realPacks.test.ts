@@ -23,7 +23,11 @@ import { WorldTables } from '../src/assets/formats/tables';
 import { readGossip } from '../src/ui/npcGossip';
 import type { GossipContext } from '../src/ui/npcGossip';
 import { PHY_PACKS } from '../src/assets/providers/localModel';
-import { PackAssetProvider, parseAreaLinks } from '../src/assets/providers/PackAssetProvider';
+import {
+  PackAssetProvider,
+  parseAreaLinks,
+  soundFileNames,
+} from '../src/assets/providers/PackAssetProvider';
 import { interiorOf, withoutSharedFaces } from '../src/assets/providers/interiorCompanion';
 import { busFaresFrom } from '../src/gameplay/busRoutes';
 import { dedupeRanks } from '../src/gameplay/SpellBook';
@@ -88,7 +92,8 @@ import { buildWaterTile } from '../src/renderer/WaterFactory';
 import { buildTerrainTile } from '../src/renderer/TerrainFactory';
 import { type TerrainMaterial, weighMaskReads } from '../src/renderer/terrainShader';
 import { Library } from '../src/assets/vfs/Library';
-import { decodeWav } from '../src/assets/formats/wav';
+import { decodeSound } from '../src/assets/formats/sound';
+import { isMusepack, readMpcHeader } from '../src/assets/formats/musepack';
 import { cueFiles, indexCatalogue } from '../src/audio/cues';
 import { zoneSoundAt } from '../src/audio/zoneSound';
 import { zoneInfoOf } from '../src/assets/providers/localZone';
@@ -3695,10 +3700,16 @@ describe.skipIf(!RES || !TABLES)('a building shell and the interior placed with 
   }, 120_000);
 });
 
+/**
+ * 4.2.2's `sound.bin`: Musepack SV8 files, and RIFF/WAVE ones (all
+ * Microsoft ADPCM) kept under `.mpc` names. Earlier builds ship only RIFF.
+ */
+const SOUND_422 = { musepack: 3417, riff: 37 } as const;
+
 describe.skipIf(!SOUND)('sound.bin, from the user packs', () => {
   it('decodes every sound it ships, as sound rather than noise', async () => {
     const pack = await PackReader.open(await fileSource(SOUND!), 'sound.bin');
-    const files = pack.entries.filter(e => !e.isDir && e.name.toLowerCase().endsWith('.wav'));
+    const files = pack.entries.filter(e => !e.isDir && /\.(wav|mpc)$/i.test(e.name));
     expect(files.length).toBeGreaterThan(500);
 
     // Recorded sound changes a little from one sample to the next. A decoder
@@ -3707,40 +3718,83 @@ describe.skipIf(!SOUND)('sound.bin, from the user packs', () => {
     // neighbours is as large as the signal itself (a ratio near 1 or more).
     // One squeal can come close to that honestly, so the ratio is judged per
     // coding, by its median. Near-silent files say nothing and are left out.
-    const ratios = new Map<number, number[]>();
+    const ratios = new Map<number | 'mpc', number[]>();
+    let riff = 0;
+    let musepack = 0;
+    let quiet = 0;
+    let samples = 0;
+    let clipped = 0;
     for (const entry of files) {
       const bytes = await pack.read(entry);
-      const pcm = decodeWav(bytes);
+      const pcm = decodeSound(bytes);
       expect(pcm.channels.length, entry.name).toBeGreaterThanOrEqual(1);
       expect(pcm.channels.length, entry.name).toBeLessThanOrEqual(2);
       expect(pcm.sampleRate, entry.name).toBeGreaterThanOrEqual(8000);
-      const samples = pcm.channels[0];
-      expect(samples.length, entry.name).toBeGreaterThan(0);
+      const samples0 = pcm.channels[0];
+      expect(samples0.length, entry.name).toBeGreaterThan(0);
+
+      let coding: number | 'mpc';
+      if (isMusepack(bytes)) {
+        musepack++;
+        coding = 'mpc';
+        const header = readMpcHeader(bytes);
+        expect(pcm.sampleRate, entry.name).toBe(header.sampleRate);
+        expect(pcm.channels.length, entry.name).toBe(header.channels);
+        for (const channel of pcm.channels) {
+          expect(channel.length, entry.name).toBe(header.samples - header.beginSilence);
+          // Lossy coding can overshoot full scale, and the reader clamps it;
+          // a wrong gain would clamp a great deal, so the clamped share is
+          // counted rather than hidden.
+          for (let i = 0; i < channel.length; i++) {
+            const v = channel[i];
+            if (!(Math.abs(v) < 1)) {
+              expect(Math.abs(v), entry.name).toBe(1);
+              clipped++;
+            }
+          }
+          samples += channel.length;
+        }
+      } else {
+        riff++;
+        // The format tag, where every shipped file keeps it: straight after
+        // the 20 bytes of RIFF header and fmt chunk header.
+        coding = bytes[20] | (bytes[21] << 8);
+      }
 
       let level = 0;
       let step = 0;
       let peak = 0;
-      for (let i = 1; i < samples.length; i++) {
-        peak = Math.max(peak, Math.abs(samples[i]));
-        level += Math.abs(samples[i]);
-        step += Math.abs(samples[i] - samples[i - 1]);
+      for (let i = 1; i < samples0.length; i++) {
+        peak = Math.max(peak, Math.abs(samples0[i]));
+        level += Math.abs(samples0[i]);
+        step += Math.abs(samples0[i] - samples0[i - 1]);
       }
       expect(peak, entry.name).toBeLessThanOrEqual(1);
-      if (level / samples.length < 0.01) continue;
-      // The format tag, where every shipped file keeps it: straight after
-      // the 20 bytes of RIFF header and fmt chunk header.
-      const coding = bytes[20] | (bytes[21] << 8);
+      if (level / samples0.length < 0.01) {
+        quiet++;
+        continue;
+      }
       const list = ratios.get(coding) ?? [];
       list.push(step / level);
       ratios.set(coding, list);
     }
-    // Linear PCM, IMA ADPCM and Microsoft ADPCM.
-    expect([...ratios.keys()].sort((a, b) => a - b)).toEqual([1, 2, 0x11]);
+    const codings = [...ratios.keys()].map(String).sort();
+    if (musepack) {
+      expect({ musepack, riff }).toEqual(SOUND_422);
+      // Musepack, and Microsoft ADPCM.
+      expect(codings).toEqual(['2', 'mpc']);
+      expect(clipped / samples).toBeLessThan(1e-4);
+      // Most files are heard, not near-silence.
+      expect(quiet).toBeLessThan(files.length / 4);
+    } else {
+      // Linear PCM, IMA ADPCM and Microsoft ADPCM.
+      expect(codings).toEqual(['1', '17', '2']);
+    }
     for (const [coding, list] of ratios) {
       list.sort((a, b) => a - b);
       expect(list[list.length >> 1], `coding ${coding}`).toBeLessThan(0.45);
     }
-  }, 300_000);
+  }, 900_000);
 });
 
 describe.skipIf(!SOUND || !TABLES)('the sound tables, against sound.bin', () => {
@@ -3759,7 +3813,7 @@ describe.skipIf(!SOUND || !TABLES)('the sound tables, against sound.bin', () => 
     expect(cues.length).toBeGreaterThan(500);
     let silent = 0;
     for (const cue of cues) {
-      const files = cueFiles(cue, 0);
+      const files = cueFiles(cue, 0).flatMap(soundFileNames);
       if (!files.some(path => sounds.has(path))) silent++;
     }
     // A few rows name whole families the build does not ship (23 of 978 in
