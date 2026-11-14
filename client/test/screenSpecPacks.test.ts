@@ -367,6 +367,9 @@ describe.skipIf(!BUILDS.size)('the screen table, against the player’s builds',
         ...(later?.regroup ? [later.regroup.where] : []),
         ...Object.values(later?.emblems ?? {}).map(one => one.at),
         ...Object.values(later?.grids ?? {}).flatMap(grid => [grid.within ?? grid.slot ?? '']),
+        ...Object.values(later?.panels ?? {}),
+        // A frame may stand on parts every build has, beside the one only later ones do.
+        ...(later?.frame ?? []).filter(name => !namesIn(meaning).includes(name)),
       ];
       for (const name of names) {
         const carriedIn = (one: Read): boolean => {
@@ -531,6 +534,41 @@ describe.skipIf(!BUILDS.size)('the screen table, against the player’s builds',
           part => !part.path.includes('/') && part.draws && !spec.frame!.includes(part.path),
         ),
       ).toBe(true);
+    },
+  );
+
+  it.skipIf(!LATER)(
+    'finds 4.2.2’s spell bar a run of 28 slots in 14 rows, sliding under a window below its top',
+    () => {
+      const later = read.get(LATER!)!;
+      const spec = later.built.spec.screens.spellBar!;
+      expect(spec.panels).toMatchObject({ window: 'mask', slider: 'panelButton' });
+      expect(spec.frame).toEqual(['mask', 'MountSkill', 'btnOpen']);
+      const parts = partsOf(later, SCREEN_MEANINGS.spellBar!)!;
+      const names = spec.groups!;
+      const grid = spec.grids!.slots!;
+      const refs = slotRefs(parts, {
+        slot: grid.slot,
+        within: grid.within!,
+        mount: names.mount,
+        sweep: names.sweep!,
+        unusable: names.unusable!,
+        short: names.short!,
+        lit: names.lit!,
+        resting: names.resting!,
+        flash: names.flash!,
+      });
+      expect(refs).toHaveLength(29);
+      expect(refs.at(-1)?.resting).toBe('MountSkill/beforeAttack29');
+      const box = (path: string) => parts.find(part => part.path === path)!.box;
+      const rows = new Set(refs.slice(0, 28).map(slot => Math.round(box(slot.path).y)));
+      expect(rows.size).toBe(14);
+      // The first row stands above the window, and the last below it.
+      const window_ = box('mask');
+      expect(Math.round(window_.y)).toBe(117);
+      expect(Math.round(window_.y + window_.h)).toBe(572);
+      expect(Math.round(box('panelButton/btn01').y)).toBe(29);
+      expect(box('panelButton/btn28').y).toBeGreaterThan(window_.y + window_.h);
     },
   );
 

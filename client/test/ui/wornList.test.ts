@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { listSlice, rowsIn, rowsInView, rowsOf } from '../../src/ui/art/wornList';
+import { listSlice, rowSlide, rowsIn, rowsInView, rowsOf } from '../../src/ui/art/wornList';
 import type { PiecePart } from '../../src/ui/art/piecePlan';
 import type { ListingSpec } from '../../src/ui/art/uiSpec';
 
@@ -213,5 +213,30 @@ describe('the marks that say a list runs on', () => {
     const foot = listSlice(screen(), { list: both, items, scroll: 99 });
     expect(foot.from).toBe(foot.furthest);
     expect(foot.from > 0).toBe(true);
+  });
+});
+
+describe('rowSlide', () => {
+  const slot = (y: number) => ({ x: 0, y, w: 40, h: 40 });
+  /** Three rows 50 apart, two slots each. */
+  const run = [0, 50, 100].flatMap(y => [slot(y), { ...slot(y), x: 50 }]);
+
+  it('stands the rows at rest with the gap above its first row at the window’s top', () => {
+    const how = rowSlide(run, { y: 20, h: 70 });
+    expect(how.pitch).toBe(50);
+    // The gap between rows is 10; half of it above the first.
+    expect(how.rest).toBe(25);
+  });
+
+  it('slides as many rows as it takes to bring the last row inside the window', () => {
+    // From the gap above the first row (−5) to the gap under the last (145): 150 tall in 70.
+    expect(rowSlide(run, { y: 20, h: 70 }).furthest).toBe(2);
+    expect(rowSlide(run, { y: 20, h: 150 }).furthest).toBe(0);
+    expect(rowSlide(run, { y: 20, h: 100 }).furthest).toBe(1);
+  });
+
+  it('does not slide one row, or none', () => {
+    expect(rowSlide([slot(0)], { y: 20, h: 10 }).furthest).toBe(0);
+    expect(rowSlide([], { y: 20, h: 10 })).toEqual({ rest: 0, pitch: 0, furthest: 0 });
   });
 });

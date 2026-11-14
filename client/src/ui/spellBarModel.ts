@@ -238,6 +238,27 @@ function ref(path: string, holder: string, number: string, index: number, n: Slo
   };
 }
 
+/**
+ * Which of the player's bar places a slot of the movie stands for: a slot
+ * of the run its own place, as far as there are places to keep, and the
+ * mount's the place after them. A build whose bar shows more slots than
+ * the places kept draws the rest empty, and they take nothing dropped on
+ * them: a place past them belongs to the ring.
+ */
+export function slotPlace(index: number, mount: boolean, kept: number): number | null {
+  if (mount) return kept;
+  return index < kept ? index : null;
+}
+
+/**
+ * How much of the window to show, in movie units: all of it where there is
+ * room, as much as there is room for where there is not, and never less
+ * than what stands beside it (the handle, the mount's slot).
+ */
+export function windowShown(tall: number, room: number, least: number): number {
+  return Math.max(least, Math.min(tall, room));
+}
+
 /** What one slot is doing, as far as its art is concerned. */
 export interface SlotView {
   /** Whether a spell is in the slot. */

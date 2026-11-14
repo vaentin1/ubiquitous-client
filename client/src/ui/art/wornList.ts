@@ -268,3 +268,80 @@ export function listGestures<T>(
     onPointerCancel: () => scroll.release(),
   };
 }
+
+/**
+ * A hand or a wheel sliding what is under a window a row at a time, for a
+ * window that is not a list's: `rowHeight` is how tall a row is on screen
+ * now. While something is being carried the hand is carrying it, not
+ * sliding the window.
+ */
+export function rowGestures(
+  scroll: ListScroll,
+  rowHeight: () => number,
+  furthest: number,
+  carrying: () => boolean,
+): Pick<
+  JSX.HTMLAttributes<HTMLDivElement>,
+  'onWheel' | 'onPointerDown' | 'onPointerMove' | 'onPointerUp' | 'onPointerCancel'
+> {
+  return {
+    onWheel: event => {
+      if (furthest <= 0) return;
+      event.preventDefault();
+      // Not on to the view, which would turn the camera as well.
+      event.stopPropagation();
+      const tall = rowHeight();
+      const perLine = tall || 1;
+      const pixels =
+        event.deltaMode === 1
+          ? event.deltaY * perLine
+          : event.deltaMode === 2
+            ? event.deltaY * perLine * furthest
+            : event.deltaY;
+      scroll.wheel(pixels, tall, furthest);
+    },
+    onPointerDown: event => scroll.press(event.clientY),
+    onPointerMove: event => {
+      if (event.buttons === 0 || carrying()) {
+        scroll.release();
+        return;
+      }
+      scroll.drag(event.clientY, rowHeight(), furthest);
+    },
+    onPointerUp: () => scroll.release(),
+    onPointerCancel: () => scroll.release(),
+  };
+}
+
+/** How rows taller than the window they show through slide under it. */
+export interface RowSlide {
+  /** How far down the rows stand at rest: the first at the window's top. */
+  rest: number;
+  /** How far one row is from the next. */
+  pitch: number;
+  /** How many rows they slide up before the last is inside the window. */
+  furthest: number;
+}
+
+/**
+ * How rows slide, from the boxes in them and the window, measured in the
+ * same space. A row at a time, each stop with the gap between two rows at
+ * the window's top, so nothing in a row stands cut across it.
+ */
+export function rowSlide(
+  slots: readonly PiecePart['box'][],
+  window: { y: number; h: number },
+): RowSlide {
+  if (!slots.length) return { rest: 0, pitch: 0, furthest: 0 };
+  const rows = [...new Set(slots.map(box => Math.round(box.y)))].sort((a, b) => a - b);
+  const pitch = rows.length > 1 ? (rows[rows.length - 1]! - rows[0]!) / (rows.length - 1) : 0;
+  const tall = Math.max(...slots.map(box => box.h));
+  const gap = Math.max(0, pitch - tall) / 2;
+  const top = Math.min(...slots.map(box => box.y)) - gap;
+  const bottom = Math.max(...slots.map(box => box.y + box.h)) + gap;
+  const rest = window.y - top;
+  const over = bottom + rest - (window.y + window.h);
+  // A rounding hair over a row is not another row to slide.
+  const furthest = pitch > 0 && over > 0 ? Math.ceil(over / pitch - 1e-6) : 0;
+  return { rest, pitch, furthest };
+}

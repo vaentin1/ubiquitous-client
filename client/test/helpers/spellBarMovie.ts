@@ -162,6 +162,55 @@ export function spellBarMovie(): UiSkinData {
   };
 }
 
+/**
+ * A bar whose run of slots is taller than the window it shows through, as
+ * 4.2.2 lays its bar out: six slots in three rows 50 apart, a window 70
+ * tall from 20 down, and the mount's slot beside it.
+ */
+export function slidingBarMovie(): UiSkinData {
+  const movie = spellBarMovie();
+  const numbered = (name: string, at: number) => `${name}${String(at).padStart(2, '0')}`;
+  const run = [1, 2, 3, 4, 5, 6].flatMap((at, index) => {
+    const x = (index % 2) * 50;
+    const y = Math.floor(index / 2) * 50;
+    return [
+      place(index * 3 + 1, 10, numbered('btn', at), x, y),
+      place(index * 3 + 2, 12, numbered('beforeAttack', at), x, y),
+      place(index * 3 + 3, 13, numbered('cooldownFinish', at), x, y),
+    ];
+  });
+  movie.shapes.push(rect(5, 100, 70));
+  movie.sprites.push(
+    { id: 70, frameCount: 1, frames: [run] },
+    {
+      id: 71,
+      frameCount: 1,
+      frames: [
+        [
+          place(1, 10, 'btnMountSkill', 0, 0),
+          place(2, 12, 'beforeAttack07', 0, 0),
+          place(3, 13, 'cooldownFinish07', 0, 0),
+        ],
+      ],
+    },
+    {
+      id: 72,
+      frameCount: 2,
+      frames: [
+        [
+          place(1, 3, 'btnOpen', 40, 30),
+          place(2, 70, 'panelButton', 60, 0),
+          place(3, 5, 'mask', 60, 20),
+          place(4, 71, 'MountSkill', 0, 40),
+        ],
+        [place(1, -1, null), place(1, 3, 'btnClose', 40, 30)],
+      ],
+    },
+  );
+  movie.root[0]!.push(place(4, 72, 'slidingBar'));
+  return movie;
+}
+
 export const SPELL_BAR_SPEC: ScreenSpec = {
   dialog: 'bar',
   frame: ['panelButton', 'MountSkill', 'btnOpen'],
@@ -199,4 +248,11 @@ export const WHEEL_SPEC: ScreenSpec = {
     of: { sweep: 'cooldown' },
     own: { flash: { at: 'spellpanel/effect01/cooldownFinish', frames: 3 } },
   },
+};
+
+export const SLIDING_BAR_SPEC: ScreenSpec = {
+  ...SPELL_BAR_SPEC,
+  dialog: 'slidingBar',
+  frame: ['mask', 'MountSkill', 'btnOpen'],
+  panels: { window: 'mask', slider: 'panelButton' },
 };

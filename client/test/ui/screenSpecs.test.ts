@@ -235,6 +235,31 @@ describe('buildScreenSpec', () => {
     expect(other.spec.groups).toEqual({ morale: 'panelSecond', fill: 'note', step: 'placeholder' });
   });
 
+  it('takes a later build’s panels one by one, and its frame only where the movie has all of it', () => {
+    const built = buildScreenSpec(skin(), WORDS, {
+      ...MEANING,
+      frame: 'btnFirst',
+      later: {
+        panels: { window: 'panelSecond', slider: 'nowhere' },
+        frame: ['btnSecond', 'btnThird'],
+        pictures: { '5': ['class/later.png'] },
+      },
+    });
+    if (!('spec' in built)) throw new Error(JSON.stringify(built));
+    expect(built.spec.panels).toMatchObject({ window: 'panelSecond' });
+    expect(built.spec.panels).not.toHaveProperty('slider');
+    expect(built.spec.frame).toEqual(['btnSecond', 'btnThird']);
+    expect(built.spec.pictures).toEqual({ '5': ['class/later.png'] });
+
+    const kept = buildScreenSpec(skin(), WORDS, {
+      ...MEANING,
+      frame: 'btnFirst',
+      later: { frame: ['btnSecond', 'nowhere'] },
+    });
+    if (!('spec' in kept)) throw new Error(JSON.stringify(kept));
+    expect(kept.spec.frame).toBe('btnFirst');
+  });
+
   it('tries a later build’s run of slots after the table’s own', () => {
     const m = skin();
     m.sprites.push({

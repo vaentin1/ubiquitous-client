@@ -13,10 +13,12 @@ import {
   handleFace,
   iconBox,
   justReady,
+  slotPlace,
   slotRefs,
   slotUse,
   spellBarStates,
   sweepFace,
+  windowShown,
 } from '../../src/ui/spellBarModel';
 import type { SlotNames, SlotView } from '../../src/ui/spellBarModel';
 
@@ -313,5 +315,30 @@ describe('barSwap', () => {
   it('leaves the mount’s own slot out of it', () => {
     expect(barSwap(3, 0, held)).toBeNull();
     expect(barSwap(0, 3, held)).toBeNull();
+  });
+});
+
+describe('slotPlace', () => {
+  it('gives each slot of the run its own place, and the mount’s the one after them', () => {
+    expect([0, 1, 11].map(index => slotPlace(index, false, 12))).toEqual([0, 1, 11]);
+    expect(slotPlace(12, true, 12)).toBe(12);
+  });
+
+  it('gives a slot past the places kept none, and the mount’s still the one after them', () => {
+    // 4.2.2's run of 28 slots, with the mount's slot numbered after it.
+    expect(slotPlace(12, false, 12)).toBeNull();
+    expect(slotPlace(27, false, 12)).toBeNull();
+    expect(slotPlace(28, true, 12)).toBe(12);
+  });
+});
+
+describe('windowShown', () => {
+  it('shows the whole window where there is room, and as much as there is room for where not', () => {
+    expect(windowShown(455, 600, 100)).toBe(455);
+    expect(windowShown(455, 300, 100)).toBe(300);
+  });
+
+  it('never cuts off what stands beside the window', () => {
+    expect(windowShown(455, 50, 107)).toBe(107);
   });
 });

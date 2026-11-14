@@ -549,6 +549,27 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
     },
     // The clip a cooldown sweeps through, and the clip played when it ends.
     bars: { of: { sweep: 'rectcooldown' }, own: { flash: 'panelButton/cooldownFinish01' } },
+    later: {
+      // A run of slots taller than the screen, slid up and down under a
+      // window that starts below the minimap: the bar is that window, the
+      // handle and the mount's slot beside it.
+      panels: { window: 'mask', slider: 'panelButton' },
+      frame: ['mask', 'MountSkill', 'btnOpen'],
+      // A second, shorter run laid over the first; the marks that say the
+      // run goes on, placed for one screen size; the area the run is
+      // dragged by; and a jump button beside the bar, where this client's
+      // jump button is the HUD's own.
+      hidden: [
+        'panelButton01',
+        'lineTop',
+        'lineTop01',
+        'lineBottom',
+        'btnScroll',
+        'btnchange',
+        'btnJump',
+        'animJump',
+      ],
+    },
   },
 
   // The spell ring in the jump button's corner: twelve slots with sweeps,

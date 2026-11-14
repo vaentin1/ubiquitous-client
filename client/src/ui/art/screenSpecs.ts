@@ -199,6 +199,12 @@ export interface Later {
   emblems?: Record<string, EmblemSpec>;
   /** Runs of slots laid out another way, tried after the table's own. */
   grids?: Record<string, GridAsked>;
+  /** Parts the screen lays out itself, taken one by one where the movie has the part. */
+  panels?: Record<string, string>;
+  /** What the screen is framed on, taken over the table's own where the movie has every part. */
+  frame?: string[];
+  /** Art outside the movie for what only later builds have, by key as in `ScreenSpec.pictures`. */
+  pictures?: Record<string, string[]>;
 }
 
 /** `value` with the part at or under `from` read at `to` instead. */
@@ -232,6 +238,8 @@ function withLater(asked: ScreenMeaning, parts: readonly PiecePart[]): ScreenMea
     carries(parts, control),
   );
   const regrouped = later.regroup && has(later.regroup.where) ? later.regroup.groups : null;
+  const panels = Object.entries(later.panels ?? {}).filter(([, part]) => has(part));
+  const framed = later.frame?.length && later.frame.every(has) ? later.frame : null;
   const grids = { ...meaning.grids };
   for (const [name, other] of Object.entries(later.grids ?? {})) {
     grids[name] = [...[grids[name] ?? []].flat(), other];
@@ -250,6 +258,9 @@ function withLater(asked: ScreenMeaning, parts: readonly PiecePart[]): ScreenMea
     ...(regrouped ? { groups: { ...meaning.groups, ...regrouped } } : {}),
     ...(later.emblems ? { emblems: { ...meaning.emblems, ...later.emblems } } : {}),
     ...(later.grids ? { grids } : {}),
+    ...(panels.length ? { panels: { ...meaning.panels, ...Object.fromEntries(panels) } } : {}),
+    ...(framed ? { frame: framed } : {}),
+    ...(later.pictures ? { pictures: { ...meaning.pictures, ...later.pictures } } : {}),
   };
 }
 

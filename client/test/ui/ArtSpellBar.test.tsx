@@ -18,7 +18,7 @@ vi.mock('../../src/ui/art/piecePlan', async actual => {
   return {
     ...real,
     planPiece: (...args: Parameters<typeof real.planPiece>) => {
-      if (args[1] === 'bar' && args[2]) asked.push(args[2]);
+      if ((args[1] === 'bar' || args[1] === 'slidingBar') && args[2]) asked.push(args[2]);
       return real.planPiece(...args);
     },
   };
@@ -31,7 +31,12 @@ import { ArtSpellBar } from '../../src/ui/components/ArtSpellBar';
 import type { ArtSpellBarProps } from '../../src/ui/components/ArtSpellBar';
 import { spellDragOver } from '../../src/ui/components/spellDrag';
 import { clearMovies } from '../helpers/stores';
-import { SPELL_BAR_SPEC, spellBarMovie } from '../helpers/spellBarMovie';
+import {
+  SLIDING_BAR_SPEC,
+  SPELL_BAR_SPEC,
+  slidingBarMovie,
+  spellBarMovie,
+} from '../helpers/spellBarMovie';
 
 afterEach(() => {
   asked.length = 0;
@@ -235,5 +240,83 @@ describe('ArtSpellBar', () => {
     const { container } = render(<ArtSpellBar {...props()} />);
     expect(container.querySelector('[data-spell-icon="0"]')).not.toBeNull();
     expect(container.querySelector('[data-spell-icon="1"]')).toBeNull();
+  });
+
+  it('has no window to slide under where the build’s bar shows whole', () => {
+    wear();
+    const { container } = render(<ArtSpellBar {...props()} />);
+    expect(container.querySelector('[data-spell-window]')).toBeNull();
+  });
+});
+
+describe('ArtSpellBar, where its run is taller than its window', () => {
+  function wearSliding(): void {
+    uiSpec.value = { screens: { spellBar: SLIDING_BAR_SPEC } };
+    setMovie({ skin: slidingBarMovie(), art: new Map() });
+    setSpellName(101, 'Sample Bolt');
+    setSpellName(102, 'Sample Ward');
+    setSpellName(900, 'Sample Mount');
+  }
+
+  it('draws the run apart, inside a window that cuts it off, and the rest of the bar outside', () => {
+    wearSliding();
+    const { container } = render(<ArtSpellBar {...props()} />);
+    const window_ = container.querySelector<HTMLElement>('[data-spell-window]')!;
+    expect(window_).not.toBeNull();
+    expect(window_.className).toContain('overflow-hidden');
+    const run = window_.querySelector('[data-spell-run]')!;
+    expect(run.querySelectorAll('button')).toHaveLength(6);
+    // The mount's slot stands beside the window, not in the run.
+    expect(window_.querySelector('[aria-label="Sample Mount"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Sample Mount"]')).not.toBeNull();
+    // The run alone is drawn to slide, and the rest is drawn without it.
+    expect(asked.some(states => states.only === 'panelButton')).toBe(true);
+    expect(asked.some(states => states.hidden?.includes('panelButton'))).toBe(true);
+  });
+
+  it('keeps a place for as many slots as the bar has places, and the mount’s after them', () => {
+    wearSliding();
+    const { container } = render(<ArtSpellBar {...props()} />);
+    const slots = [...container.querySelectorAll<HTMLElement>('[data-spell-slot]')];
+    // Two places and the mount's: the four slots past them take nothing.
+    expect(slots.map(slot => slot.dataset.spellSlot).sort()).toEqual(['0', '1', '2']);
+    expect(container.querySelector('[data-spell-slot="2"]')!.getAttribute('aria-label')).toBe(
+      'Sample Mount',
+    );
+    expect(container.querySelector('[data-spell-run]')!.querySelectorAll('button')).toHaveLength(6);
+  });
+
+  it('slides a row at a time under a wheel, as far as its last row and no further', () => {
+    wearSliding();
+    const { container } = render(<ArtSpellBar {...props()} />);
+    const window_ = () => container.querySelector<HTMLElement>('[data-spell-window]')!;
+    expect(window_().dataset.row).toBe('0');
+    const run = () => container.querySelector<HTMLElement>('[data-spell-run]')!.style.top;
+    const atRest = run();
+    fireEvent.wheel(window_(), { deltaY: 100 });
+    expect(window_().dataset.row).toBe('1');
+    expect(run()).not.toBe(atRest);
+    for (let turn = 0; turn < 5; turn++) fireEvent.wheel(window_(), { deltaY: 100 });
+    // Three rows in a window two rows tall: two rows to slide.
+    expect(window_().dataset.row).toBe('2');
+    fireEvent.wheel(window_(), { deltaY: -100 });
+    expect(window_().dataset.row).toBe('1');
+  });
+
+  it('casts nothing from a press that slid the run, and casts from the next', () => {
+    wearSliding();
+    const onCast = vi.fn();
+    const { container, getByLabelText } = render(<ArtSpellBar {...props({ onCast })} />);
+    const window_ = container.querySelector<HTMLElement>('[data-spell-window]')!;
+    const slot = getByLabelText('Sample Bolt');
+    fireEvent.pointerDown(slot);
+    fireEvent.wheel(window_, { deltaY: 100 });
+    fireEvent.pointerUp(slot);
+    fireEvent.click(slot);
+    expect(onCast).not.toHaveBeenCalled();
+    fireEvent.pointerDown(slot);
+    fireEvent.pointerUp(slot);
+    fireEvent.click(slot);
+    expect(onCast).toHaveBeenCalledWith(101);
   });
 });
