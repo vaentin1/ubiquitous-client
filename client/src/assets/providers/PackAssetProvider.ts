@@ -119,12 +119,17 @@ export interface PackAssetProviderOptions {
 const MASK_PREFIX = 'mask:';
 const AVATAR_PREFIX = 'avatar:';
 
-/** Class badges in `ui/icons/career/`; which is which was observed in play by the owner. */
-const CLASS_ICON_FILES: Readonly<Record<number, string>> = {
+/**
+ * Class badges in `ui/icons/career/`; which of the first four is which was
+ * observed in play by the owner. 4.2.2's Flame Knight, class 5, has the one
+ * badge that build adds, beside its `ui_leaderboard_flameknight` picture.
+ */
+export const CLASS_ICON_FILES: Readonly<Record<number, string>> = {
   1: 'ui_warrior_online.png',
   2: 'ui_mage_online.png',
   3: 'ui_hunter_online.png',
   4: 'ui_priest_online.png',
+  5: 'ui_knight_online.png',
 };
 
 /** A generic body beats an invisible one. */

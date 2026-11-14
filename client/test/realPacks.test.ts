@@ -24,6 +24,7 @@ import { readGossip } from '../src/ui/npcGossip';
 import type { GossipContext } from '../src/ui/npcGossip';
 import { PHY_PACKS } from '../src/assets/providers/localModel';
 import {
+  CLASS_ICON_FILES,
   PackAssetProvider,
   parseAreaLinks,
   soundFileNames,
@@ -2423,6 +2424,25 @@ describe.skipIf(!TABLES)('spell visuals, in the user tables', () => {
     }
     expect(castable).toBeGreaterThan(100);
     expect(namedViaColumn5 / castable).toBeGreaterThan(0.9);
+  }, 60_000);
+
+  it('has a badge in ui/icons/career/ for every class the tables list', async () => {
+    const tables = await load();
+    const shipped = new Set<string>();
+    for (const name of ['res.bin', 'res_t.bin']) {
+      const path = join(dirname(TABLES!), name);
+      if (!existsSync(path)) continue;
+      for (const entry of (await PackReader.open(await fileSource(path), name)).entries)
+        shipped.add(entry.name.toLowerCase());
+    }
+    if (shipped.size === 0) return;
+    const classes = tables.rowsOf('character_class').map(row => Number(row[0]));
+    expect(classes.length).toBeGreaterThanOrEqual(4);
+    for (const playerClass of classes) {
+      const file = CLASS_ICON_FILES[playerClass];
+      expect(file, `class ${playerClass}`).toBeDefined();
+      expect(shipped.has(`ui/icons/career/${file}`), file).toBe(true);
+    }
   }, 60_000);
 
   it('finds Switch Target and the gathers by name and by the objects that name them', async () => {

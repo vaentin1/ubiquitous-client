@@ -359,6 +359,7 @@ whole-population parses of the user's 1.1.4 and 2.2.0 files.
 - observed in play by the owner: the red banner stands centred a third of the way down the screen, in large bold lettering.
 - observed in play by the owner: the party leader wears a mark in the team list, past the end of the leader's name and a little above the row's top edge (`LEADER_MARK` in `ArtTeamFrames.tsx`).
 - observed in play by the owner: which badge in `ui/icons/career/` stands for which class number (`CLASS_ICON_FILES` in `PackAssetProvider.ts`).
+- own reading of the user's 4.2.2 files: `ui_knight_online.png` in `ui/icons/career/` (in `res_t.bin`) is the one badge that build adds to 1.1.4's four, next to a `ui_leaderboard_flameknight.png`, so it is taken as class 5's, Flame Knight's.
 - observed in play by the owner: an NPC with gossip shows the speech bubble over the two "not yet" quest marks, and a quest ready to pick up or hand in shows its mark over the bubble.
 - own choice: models hide at the draw distance, where the fog saturates (240 units at the default setting).
 - sampled from public screenshots of the game: the quest-log colours for a quest below, at and above the player's level; own choice, adjusted for contrast on a list row: below `#3fb43d` to `#4ec34c`, above `#ba6f70` to `#d1a0a0`; at your level reuses the notice yellow `#dedc60` (sampled as `#e0e066`).

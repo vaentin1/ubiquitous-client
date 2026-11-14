@@ -25,8 +25,8 @@ export function setTopbarIcon(name: string, icon: ImageBitmap): void {
   topbarIcons.value = new Map(topbarIcons.value).set(name, icon);
 }
 
-/** The game's class numbers that have a badge picture: warrior, mage, ranger, monk. */
-export const CLASS_IDS = [1, 2, 3, 4] as const;
+/** The game's class numbers that may have a badge picture: warrior, mage, ranger, monk and, from 4.2.2, flame knight. */
+export const CLASS_IDS = [1, 2, 3, 4, 5] as const;
 
 /** Each class's badge picture, by the game's class number, once it decodes. */
 export const classIcons = signal<ReadonlyMap<number, ImageBitmap>>(new Map());
