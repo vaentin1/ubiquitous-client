@@ -7,6 +7,7 @@ import { emblems, wantEmblems } from '../art/pieceStore';
 import { WornPiece } from '../art/WornPiece';
 import { iconUrl } from '../iconUrl';
 import type { PiecePart } from '../art/piecePlan';
+import { useWorn } from '../art/useWorn';
 import type { Worn } from '../art/useWorn';
 import { markRuns } from '../art/wornWords';
 
@@ -90,24 +91,21 @@ export function WornSteps({
 const STEP_DIALOG = 'races_group';
 
 /**
- * The gold frame and plaque behind every screen before the world, placed
- * around the screen rather than where the movie parks it.
+ * The dark strip across the top of every screen before the world, which
+ * the character's name (and the class's) is written on. Drawn where the
+ * movie puts it; stretched over the whole screen it was a black box over
+ * the character.
  */
 export function WornFrame(): JSX.Element | null {
-  return <WornPiece dialog={FRAME_PIECE} part={FRAME_PIECE} movie="LGM" box={FRAME_PLACE} />;
+  const worn = useWorn(FRAME_PIECE, FRAME_PIECE, NOTHING_ASKED, { movie: 'LGM', floats: true });
+  return <WornPanel worn={worn} name="name-strip" />;
 }
 
-/** The piece of the movie that frame is. */
+/** The piece of the movie that strip is. */
 const FRAME_PIECE = 'createbg';
 
-/** A share of the stage, the same for every screen, so the frame never resizes; edge controls fall outside. */
-const FRAME_PLACE = {
-  position: 'absolute' as const,
-  left: '9.25%',
-  top: '3.4%',
-  width: '81.5%',
-  height: '76%',
-};
+/** The strip has no states of its own. */
+const NOTHING_ASKED = {};
 
 /** The picture itself, with everything placed on it inside. */
 export function WornPanel({

@@ -95,8 +95,8 @@ export function FrontEnd(): JSX.Element | null {
             own screen, scaled to the page. */}
         {worn && (
           <WornStage takesPointer={false} inset={STAGE_INSET}>
-            {/* The build's own frame, behind every screen but the one
-                for signing in: that one is a panel of its own. */}
+            {/* The strip the name is written on, behind every screen
+                but the one for signing in: that one is a panel of its own. */}
             {at !== 'signIn' && <WornFrame />}
             {at === 'signIn' && <ArtSignIn />}
             {at === 'characters' && <ArtChooseCharacter />}
