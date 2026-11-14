@@ -416,6 +416,18 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
     // The shop and the lottery are not this client's, and the hints are
     // the build's first-run tour.
     hidden: ['btnLotto', 'btnstore', 'animBagTip', 'animCloseTip', 'animQuestTip', 'animSpellTip'],
+    // The other shop, its currency and its offers, and the streaming link.
+    later: {
+      hidden: [
+        'btnNick',
+        'btnNickMoney',
+        'btnNickMoneyPromo',
+        'btnstorePromo',
+        'storestone',
+        'btntwitch',
+        'animInviteTip',
+      ],
+    },
   },
 
   topbarMenu: {
@@ -471,6 +483,14 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
     values: { level: 'btnCharFace/MClv' },
     // The signal marks and the ring lit round a picked portrait.
     hidden: ['btnCharFace/network', 'btnCharFace/ping', 'btnCharFace/selected'],
+    later: {
+      // Each length of the meter a group of its own, holding the clip
+      // that climbs and its pips.
+      regroup: {
+        where: 'MCRageBar/RageGeneral',
+        groups: { fill: 'RageGeneral', fillBeyond: 'RageMax', step: 'anim' },
+      },
+    },
   },
 
   targetFrame: {
@@ -1213,6 +1233,18 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
       'scroll/info/scroll/completeprocess',
       'scroll/info/scroll/info',
     ],
+    // A build that draws its own picture at one spot instead.
+    optional: ['yellowquestion', 'grayquestion'],
+    later: {
+      // The help card the information button opens is not this client's.
+      hidden: ['btninformation'],
+      // One spot on each row, 24 units across, where the build draws the
+      // mark from a file of its own.
+      emblems: {
+        ready: { at: 'questionicon', icon: 'quest/QuestFinished.png', size: 24 },
+        under: { at: 'questionicon', icon: 'quest/QuestUnfinished.png', size: 24 },
+      },
+    },
   },
 
   spells: {
@@ -1382,6 +1414,33 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
       'teamsetting/txtRule',
       'teamsetting/txtTeamAllotment',
     ],
+    later: {
+      // The Dungeon page's controls stand in a panel of their own, beside
+      // one for finding a random dungeon that is not this client's.
+      moved: Object.fromEntries(
+        [
+          'txtdungeonreset',
+          'txtdungeonsave',
+          'txtdungeonmode',
+          'exhausting',
+          'btndungeonreset',
+          'btndungeonmodeleft',
+          'btndungeonmoderight',
+          'btndungeonsave',
+        ].map(name => [
+          `dungeonsetting/${name}`,
+          `dungeonsetting/panelGeneDungeon/panelGeneDungeon/${name}`,
+        ]),
+      ),
+      hidden: [
+        'dungeonsetting/panelRanDungeon',
+        'dungeonsetting/btnPVP00',
+        'dungeonsetting/btnPVP01',
+        'dungeonsetting/text00',
+        'dungeonsetting/text01',
+        'dungeonsetting/panelGeneDungeon/panelGeneDungeon/btnResetExhau',
+      ],
+    },
   },
 
   options: {
@@ -1444,6 +1503,38 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
     },
     // The page's other pages: the sound, the interface and asking for help.
     hidden: ['panelAudio', 'panelInterface', 'panelSOS', 'btnScroll'],
+    // A build whose first page has no report control.
+    optional: ['panelMain/buttonReport/text'],
+    later: {
+      // The first page's controls stand in a group of their own.
+      moved: {
+        'panelMain/buttonGameSetting': 'panelMain/group/buttonGameSetting',
+        'panelMain/buttonCharacterList': 'panelMain/group/buttonCharacterList',
+        'panelMain/buttonMainMenu': 'panelMain/group/buttonMainMenu',
+        'panelMain/buttonHelp': 'panelMain/group/buttonHelp',
+        'panelMain/buttonSetting': 'panelMain/group/buttonSetting',
+        // Own choice: the two switches after the last of ours carry our
+        // other two settings, where the build parks the switch 1.1.4 gives
+        // one of them off the column; the last switch is the one the
+        // screen copies for its extra rows, so it is a plain switch.
+        'panelSetting/optiongroup/btn3g': 'panelSetting/optiongroup/btnlottery',
+        'panelSetting/optiongroup/text3g': 'panelSetting/optiongroup/textlottery',
+        'panelSetting/optiongroup/btnMiniMusic': 'panelSetting/optiongroup/btnSticker',
+        'panelSetting/optiongroup/textMiniMusic': 'panelSetting/optiongroup/textSticker',
+      },
+      // Links to the publisher's own pages and the news it counts; the
+      // switches parked off the column, and the column's settings past
+      // the two that carry ours, which are not this client's.
+      hidden: [
+        'dlgocm',
+        'panelMain/group/buttonOCM',
+        'panelMain/group/textnewsnumberbg',
+        'panelMain/btnSOSScroll',
+        ...['ShortcutBar', 'Social', 'AutoShare', 'Hints', 'Minimap', 'displayname'].flatMap(
+          name => [`panelSetting/optiongroup/btn${name}`, `panelSetting/optiongroup/text${name}`],
+        ),
+      ],
+    },
   },
   // Asked before leaving the world, in the build's own words.
   dungeonResetAsk: askBox('@1487?~619545e64e89320a~51'),
@@ -1809,6 +1900,28 @@ export const SCREEN_MEANINGS: Readonly<Record<string, ScreenMeaning>> = {
       'Stone',
     ],
     captions: { textsort: 'Sort' },
+    later: {
+      // Each half shows one of several bags of twelve, slid sideways: the
+      // first stands for the whole store, paged as the halves are.
+      grids: {
+        bank: {
+          slot: 'item',
+          within: 'groupSubBox/scroll/sub01',
+          pager: /^pageleftrightbox$/i,
+          sort: 'btnsort',
+        },
+        bag: { slot: 'item', within: 'groupSubBag/scroll/sub01', pager: /^pageleftrightbag$/i },
+      },
+      hidden: [
+        'groupSubBox/scroll/sub02',
+        'groupSubBox/scroll/sub03',
+        'groupSubBag/scroll/sub02',
+        'groupSubBag/scroll/sub03',
+        'btnupgrade',
+        'bagTab',
+        'textbag',
+      ],
+    },
   },
 
   trade: {

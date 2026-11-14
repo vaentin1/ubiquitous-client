@@ -186,6 +186,79 @@ describe('buildScreenSpec', () => {
     expect(built.spec).not.toHaveProperty('later');
   });
 
+  it('reads a part where a later build keeps it, and where it stands where the build does not', () => {
+    const later = {
+      moved: { panelFirst: 'panelSecond', btnMissing: 'btnSecond', btnGone: 'nowhere' },
+    };
+    const moved = buildScreenSpec(skin(), WORDS, {
+      ...MEANING,
+      actions: { btnMissing: 'first', btnGone: 'gone' },
+      optional: ['btnGone'],
+      later,
+    });
+    if (!('spec' in moved)) throw new Error(JSON.stringify(moved));
+    expect(moved.spec.captions).toHaveProperty(['panelSecond/note']);
+    expect(moved.spec.captions).not.toHaveProperty(['panelFirst/note']);
+    // Read where the build has the new place, and left alone where it has none.
+    expect(moved.spec.actions).toEqual({ btnSecond: 'first', btnGone: 'gone' });
+    // A part the move leaves behind is not drawn.
+    expect(moved.spec.hidden).toContain('panelFirst');
+
+    const kept = buildScreenSpec(skin(), WORDS, {
+      ...MEANING,
+      later: { moved: { panelFirst: 'panelElsewhere' } },
+    });
+    if (!('spec' in kept)) throw new Error(JSON.stringify(kept));
+    expect(kept.spec.captions).toHaveProperty(['panelFirst/note']);
+    expect(kept.spec.hidden ?? []).not.toContain('panelFirst');
+  });
+
+  it('regroups only where the movie has the part that marks the later layout', () => {
+    const regroup = {
+      where: 'panelSecond/note',
+      groups: { morale: 'panelSecond', fill: 'note', step: 'placeholder' },
+    };
+    // A meter laid out as 1.1.4 lays it: the groups the table gives stand.
+    const own = buildScreenSpec(skin(), WORDS, {
+      ...MEANING,
+      groups: { fill: 'amount' },
+      later: { regroup: { ...regroup, where: 'panelSecond/missing' } },
+    });
+    if (!('spec' in own)) throw new Error(JSON.stringify(own));
+    expect(own.spec.groups).toEqual({ fill: 'amount' });
+    const other = buildScreenSpec(skin(), WORDS, {
+      ...MEANING,
+      groups: { fill: 'amount' },
+      later: { regroup },
+    });
+    if (!('spec' in other)) throw new Error(JSON.stringify(other));
+    expect(other.spec.groups).toEqual({ morale: 'panelSecond', fill: 'note', step: 'placeholder' });
+  });
+
+  it('tries a later build’s run of slots after the table’s own', () => {
+    const m = skin();
+    m.sprites.push({
+      id: 30,
+      frameCount: 1,
+      frames: [[place(1, 0, 0, 'cell01'), place(1, 50, 0, 'cell02'), place(1, 100, 0, 'cell03')]],
+    });
+    m.sprites[0]!.frames[0]!.push(place(30, 0, 100, 'bagOne'), place(30, 0, 200, 'bagTwo'));
+    const asked = (own: string): ScreenMeaning => ({
+      ...MEANING,
+      grids: { bank: { slot: own } },
+      later: { grids: { bank: { slot: 'cell', within: 'bagOne' } } },
+    });
+    const later = buildScreenSpec(m, WORDS, asked('slot'));
+    if (!('spec' in later)) throw new Error(JSON.stringify(later));
+    expect(later.spec.grids?.bank).toMatchObject({ slot: 'cell', within: 'bagOne' });
+    const first = buildScreenSpec(m, WORDS, {
+      ...asked('cell'),
+      grids: { bank: { slot: 'cell', within: 'bagTwo' } },
+    });
+    if (!('spec' in first)) throw new Error(JSON.stringify(first));
+    expect(first.spec.grids?.bank).toMatchObject({ slot: 'cell', within: 'bagTwo' });
+  });
+
   it('does not refuse a screen for hiding a part the build lacks', () => {
     expect('spec' in buildScreenSpec(skin(), WORDS, { ...MEANING, hidden: ['nowhere'] })).toBe(
       true,

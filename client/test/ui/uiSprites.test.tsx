@@ -77,15 +77,15 @@ function movie(
   };
 }
 
-const ICONS = UI_SPRITES['coin-silver'].sheet;
-const BANNER = UI_SPRITES['button-fill-light'].sheet;
+const ICONS = [UI_SPRITES['coin-silver'].sheet].flat()[0]!;
+const BANNER = [UI_SPRITES['button-fill-light'].sheet].flat()[0]!;
 
 /** Every sprite placed somewhere distinct on its sheet. */
 function fullMovie(): UiSkinData {
   const parts: Parameters<typeof movie>[0] = {};
   UI_SPRITE_NAMES.forEach((name, i) => {
     const spec = UI_SPRITES[name];
-    parts[spec.instance] = { sheet: spec.sheet, x: 10 + i * 20, y: 5, w: 16, h: 12 };
+    parts[spec.instance] = { sheet: [spec.sheet].flat()[0]!, x: 10 + i * 20, y: 5, w: 16, h: 12 };
   });
   return movie(parts);
 }
@@ -93,7 +93,13 @@ function fullMovie(): UiSkinData {
 describe('finding a sprite in the player’s movie', () => {
   it('reads the rectangle back through the fill', () => {
     const film = movie({ iconSilver: { sheet: ICONS, x: 300, y: 40, w: 50, h: 50 } });
-    expect(locateSprite(film, UI_SPRITES['coin-silver'])).toEqual({ x: 300, y: 40, w: 50, h: 50 });
+    expect(locateSprite(film, UI_SPRITES['coin-silver'])).toEqual({
+      sheet: ICONS,
+      x: 300,
+      y: 40,
+      w: 50,
+      h: 50,
+    });
   });
 
   it('follows the instance down into the sprite that draws it', () => {
@@ -103,7 +109,29 @@ describe('finding a sprite in the player’s movie', () => {
       frameCount: 1,
       frames: [[{ depth: 1, characterId: 1, matrix: IDENTITY, name: 'iconGold', opacity: 1 }]],
     });
-    expect(locateSprite(film, UI_SPRITES['coin-gold'])).toEqual({ x: 7, y: 9, w: 19, h: 19 });
+    expect(locateSprite(film, UI_SPRITES['coin-gold'])).toEqual({
+      sheet: ICONS,
+      x: 7,
+      y: 9,
+      w: 19,
+      h: 19,
+    });
+  });
+
+  it('finds a sprite on whichever of its sheets the build fills it from', async () => {
+    const elsewhere = [UI_SPRITES['coin-gold'].sheet].flat().find(one => one !== ICONS)!;
+    const film = movie({ iconGold: { sheet: elsewhere, x: 4, y: 6, w: 19, h: 19 } });
+    expect(locateSprite(film, UI_SPRITES['coin-gold'])).toEqual({
+      sheet: elsewhere,
+      x: 4,
+      y: 6,
+      w: 19,
+      h: 19,
+    });
+    const read = vi.fn(async (_sheet: string, _movie: UiMovie) => sheet(1024, 1024));
+    const found = await cutUiSprites(async () => film, read, describeCut, ['coin-gold']);
+    expect(read.mock.calls.map(([name]) => name)).toEqual([elsewhere]);
+    expect(found.get('coin-gold')).toBe('blob:1024/4,6,19,19');
   });
 
   it('refuses an instance filled from some other sheet', () => {

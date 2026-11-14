@@ -406,13 +406,18 @@ function Worn({ onClose, spec }: ArtOptionsWindowProps & { spec: ScreenSpec }): 
     .map(([where]) => inside(where) ?? '')
     .filter(Boolean);
 
+  /** What the column leaves out: whatever the spec hides by its path inside it. */
+  const notInColumn = (spec.hidden ?? [])
+    .filter(where => inside(where) !== where)
+    .map(where => inside(where)!);
+
   /** The column of settings, as a picture of its own. */
   const column = useWorn(
     spec.panels?.scroll,
     spec.panels?.scroll,
     // Placed but not drawn: the row still says where its control
     // goes, and the slider is drawn across it in the switch's place.
-    { frames: faces, withoutArt: slid },
+    { frames: faces, withoutArt: slid, hidden: notInColumn },
     { floats: true },
   );
 
@@ -431,13 +436,13 @@ function Worn({ onClose, spec }: ArtOptionsWindowProps & { spec: ScreenSpec }): 
   const allOn = useWorn(
     spec.panels?.scroll,
     spec.panels?.scroll,
-    { frames: allFaces(true), withoutArt: slid },
+    { frames: allFaces(true), withoutArt: slid, hidden: notInColumn },
     { floats: true },
   );
   const allOff = useWorn(
     spec.panels?.scroll,
     spec.panels?.scroll,
-    { frames: allFaces(false), withoutArt: slid },
+    { frames: allFaces(false), withoutArt: slid, hidden: notInColumn },
     { floats: true },
   );
 
@@ -448,12 +453,22 @@ function Worn({ onClose, spec }: ArtOptionsWindowProps & { spec: ScreenSpec }): 
    * Where the column stands inside its window at rest, as a share of the
    * window: the movie keeps it a little in from the window's corner.
    */
-  const columnAt = worn.whole.find(part => part.path === spec.panels?.scroll)?.box;
+  const inWhole = (path: string | undefined) => worn.whole.find(part => part.path === path)?.box;
+  const shownThrough = inWhole(spec.panels?.window);
+  // Found by the slider, which both the screen and the column's own
+  // picture place: the picture's corner is not the column's where the
+  // column also holds controls parked off to one side of it.
+  const anchor = inWhole(spec.panels?.quality);
+  const anchorInColumn = column.find(inside(spec.panels?.quality))?.box;
+  const columnAt =
+    anchor && anchorInColumn
+      ? { x: anchor.x - anchorInColumn.x, y: anchor.y - anchorInColumn.y }
+      : inWhole(spec.panels?.scroll);
   const inset =
-    window_ && columnAt && window_.box.w > 0 && window_.box.h > 0
+    shownThrough && columnAt && shownThrough.w > 0 && shownThrough.h > 0
       ? {
-          left: `${Math.round(((columnAt.x - window_.box.x) / window_.box.w) * 1000) / 10}%`,
-          top: `${Math.round(((columnAt.y - window_.box.y) / window_.box.h) * 1000) / 10}%`,
+          left: `${Math.round(((columnAt.x - shownThrough.x) / shownThrough.w) * 1000) / 10}%`,
+          top: `${Math.round(((columnAt.y - shownThrough.y) / shownThrough.h) * 1000) / 10}%`,
         }
       : {};
   /** The column at the screen's scale, sized from movie units rather than stretched to the window. */
@@ -575,7 +590,9 @@ function Worn({ onClose, spec }: ArtOptionsWindowProps & { spec: ScreenSpec }): 
           <div
             ref={column_}
             className="relative will-change-transform"
-            style={{ ...inset, transform: `translateY(${-at}px)` }}
+            // As wide as the picture: what stands on it is placed in
+            // shares of it, and the window can be the narrower.
+            style={{ ...inset, width: `${wide}px`, transform: `translateY(${-at}px)` }}
           >
             <img
               ref={column.pictureRef}

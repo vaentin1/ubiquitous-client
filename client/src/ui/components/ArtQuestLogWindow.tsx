@@ -11,6 +11,7 @@ import type { PiecePart } from '../art/piecePlan';
 import type { ScreenSpec } from '../art/uiSpec';
 import { INK, LIGHT, useWorn, useWornScreen } from '../art/useWorn';
 import { WornCaptions } from '../art/WornCaptions';
+import { WornEmblem } from '../art/WornEmblem';
 import { WornChevrons } from '../art/WornChevrons';
 import { WornPiece } from '../art/WornPiece';
 import { WornRow } from '../art/WornRow';
@@ -93,6 +94,13 @@ function Worn({
     listSlice(whole, { list, items: quests, scroll: scroll.at, values: columnsOf });
 
   const faces = unavailableFaces(spec, { share: picked !== null, drop: picked !== null });
+  /** The pictures a row wears for its mark, where the movie draws neither mark itself. */
+  const markPictures = Object.fromEntries(
+    (['ready', 'under'] as const).flatMap(mark => {
+      const picture = spec.emblems?.[mark];
+      return picture ? [[mark, picture] as const] : [];
+    }),
+  );
 
   const worn = useWorn(
     spec.dialog,
@@ -104,6 +112,11 @@ function Worn({
       return {
         withoutArt: [
           ...slice.marks,
+          // The spot a row's own picture is drawn at, where the build
+          // keeps one in place of the two marks.
+          ...slice.keptRows.flatMap(path =>
+            Object.values(markPictures).map(picture => `${path}/${picture.at}`),
+          ),
           // The pane the screen keeps a quest's own words in: it is parked
           // off to one side, and what is wanted from it is the lettering
           // its fields were given, not where the movie puts them.
@@ -311,6 +324,24 @@ function Worn({
           className={HIT}
         />
       ))}
+
+      {/* The mark a quest has earned, as a picture of its own where the
+          row keeps a spot for one rather than both marks. */}
+      {rows.map(({ row, item }) => {
+        const mark = ready(item) ? 'ready' : 'under';
+        const drawn = spec.groups?.[mark];
+        const picture = markPictures[mark];
+        if (!picture || (drawn && worn.find(`${row.path}/${drawn}`))) return null;
+        return (
+          <WornEmblem
+            key={`${row.path}.mark`}
+            worn={worn}
+            at={worn.find(`${row.path}/${picture.at}`)}
+            icon={picture.icon}
+            size={picture.size}
+          />
+        );
+      })}
 
       {/* The box on each row for the quest the guide points at. */}
       {list?.does?.track

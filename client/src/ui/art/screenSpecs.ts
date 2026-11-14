@@ -23,7 +23,15 @@ import type { FaceRun } from './faceRuns';
 import { findPlacements, planPiece } from './piecePlan';
 import type { PiecePart } from './piecePlan';
 import { quoteAt } from './uiSpec';
-import type { BagSpec, GridSpec, ListingSpec, ScreenSpec, TabSpec, UiSpec } from './uiSpec';
+import type {
+  BagSpec,
+  EmblemSpec,
+  GridSpec,
+  ListingSpec,
+  ScreenSpec,
+  TabSpec,
+  UiSpec,
+} from './uiSpec';
 import type { UiSkinData } from '../../assets/types';
 import type { UiMovie } from '../../assets/ids';
 
@@ -175,21 +183,73 @@ export interface Later {
   actions?: Record<string, string>;
   calls?: Record<string, string>;
   words?: Record<string, string>;
+  /**
+   * Parts a later build keeps elsewhere, or controls it lays out where the
+   * table's own no longer stand: every name the table gives at or under a
+   * key is read at its value instead, where the movie has the value, and
+   * the part at the key, where the movie still has it, is not drawn.
+   */
+  moved?: Record<string, string>;
+  /**
+   * Groups laid out another way, taken over the table's own where the
+   * movie has the part at the path `where` names.
+   */
+  regroup?: { where: string; groups: Record<string, string> };
+  /** Pictures the screen draws at spots the movie keeps for them. */
+  emblems?: Record<string, EmblemSpec>;
+  /** Runs of slots laid out another way, tried after the table's own. */
+  grids?: Record<string, GridAsked>;
+}
+
+/** `value` with the part at or under `from` read at `to` instead. */
+function movedTo(value: string, from: string, to: string): string {
+  return value === from || value.startsWith(`${from}/`) ? to + value.slice(from.length) : value;
+}
+
+/** Every name in `value`, keys included, read where `moves` puts it. */
+function moveNames<T>(value: T, moves: ReadonlyArray<readonly [string, string]>): T {
+  const move = (name: string): string =>
+    moves.reduce((now, [from, to]) => movedTo(now, from, to), name);
+  if (typeof value === 'string') return move(value) as T;
+  if (Array.isArray(value)) return value.map(one => moveNames(one, moves)) as T;
+  if (value && typeof value === 'object' && !(value instanceof RegExp)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, held]) => [move(key), moveNames(held, moves)]),
+    ) as T;
+  }
+  return value;
 }
 
 /** The meaning with what a later build adds folded in, where the movie carries it. */
-function withLater(meaning: ScreenMeaning, parts: readonly PiecePart[]): ScreenMeaning {
-  const later = meaning.later;
-  if (!later) return meaning;
+function withLater(asked: ScreenMeaning, parts: readonly PiecePart[]): ScreenMeaning {
+  const later = asked.later;
+  if (!later) return asked;
+  const has = (path: string): boolean => parts.some(part => part.path === path);
+  const moves = Object.entries(later.moved ?? {}).filter(([, to]) => has(to));
+  const { later: _later, ...rest } = asked;
+  const meaning: ScreenMeaning = moves.length ? { ...moveNames(rest, moves), later } : asked;
   const actions = Object.entries(later.actions ?? {}).filter(([control]) =>
     carries(parts, control),
   );
+  const regrouped = later.regroup && has(later.regroup.where) ? later.regroup.groups : null;
+  const grids = { ...meaning.grids };
+  for (const [name, other] of Object.entries(later.grids ?? {})) {
+    grids[name] = [...[grids[name] ?? []].flat(), other];
+  }
   return {
     ...meaning,
-    hidden: [...(meaning.hidden ?? []), ...(later.hidden ?? [])],
+    hidden: [
+      ...(meaning.hidden ?? []),
+      ...(later.hidden ?? []),
+      // What a move leaves behind, where the build keeps it, is not drawn.
+      ...moves.map(([from]) => from).filter(has),
+    ],
     actions: { ...meaning.actions, ...Object.fromEntries(actions) },
     calls: { ...meaning.calls, ...later.calls },
     words: { ...meaning.words, ...later.words },
+    ...(regrouped ? { groups: { ...meaning.groups, ...regrouped } } : {}),
+    ...(later.emblems ? { emblems: { ...meaning.emblems, ...later.emblems } } : {}),
+    ...(later.grids ? { grids } : {}),
   };
 }
 

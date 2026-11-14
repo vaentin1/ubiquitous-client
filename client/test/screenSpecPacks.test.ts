@@ -263,6 +263,16 @@ function quotesIn(value: unknown, all = false): string[] {
   return [];
 }
 
+/** Where a name the table gives is read in a build that keeps it elsewhere. */
+function movedIn(meaning: ScreenMeaning, parts: readonly PiecePart[], name: string): string {
+  for (const [from, to] of Object.entries(meaning.later?.moved ?? {})) {
+    const there = parts.some(part => part.path === to);
+    if (there && (name === from || name.startsWith(`${from}/`)))
+      return to + name.slice(from.length);
+  }
+  return name;
+}
+
 /** Every icon file a table entry names, under the build's icon directory. */
 function iconsIn(meaning: ScreenMeaning): string[] {
   return [
@@ -321,6 +331,19 @@ describe.skipIf(!BUILDS.size)('the screen table, against the player’s builds',
           !TARGET &&
           lacking.every(one => {
             if (harmless.has(name)) return true;
+            // A part the build keeps under another parent is held there.
+            const parts = partsOf(one, meaning);
+            if (parts && carried(parts, movedIn(meaning, parts, name))) return true;
+            // A run the build lays out another way is held to that way.
+            const relaid = Object.keys(meaning.later?.grids ?? {}).filter(
+              grid => one.built.spec.screens[screen]?.grids?.[grid],
+            );
+            if (
+              relaid.some(grid =>
+                namesIn({ dialog: '', grids: { [grid]: meaning.grids![grid]! } }).includes(name),
+              )
+            )
+              return true;
             const why = one.built.fallbacks[screen];
             return (
               why?.reason === 'no-dialog' ||
@@ -336,9 +359,14 @@ describe.skipIf(!BUILDS.size)('the screen table, against the player’s builds',
   it('names what only later builds carry from 4.2.2, and from 1.1.4 never', () => {
     const wrong: string[] = [];
     for (const [screen, meaning] of Object.entries(SCREEN_MEANINGS)) {
+      const later = meaning.later;
       const names = [
-        ...(meaning.later?.hidden ?? []),
-        ...Object.keys(meaning.later?.actions ?? {}),
+        ...(later?.hidden ?? []),
+        ...Object.keys(later?.actions ?? {}),
+        ...Object.values(later?.moved ?? {}),
+        ...(later?.regroup ? [later.regroup.where] : []),
+        ...Object.values(later?.emblems ?? {}).map(one => one.at),
+        ...Object.values(later?.grids ?? {}).flatMap(grid => [grid.within ?? grid.slot ?? '']),
       ];
       for (const name of names) {
         const carriedIn = (one: Read): boolean => {
@@ -782,11 +810,12 @@ describe.skipIf(!BUILDS.size)('the screen table, against the player’s builds',
     expect(moved).toEqual([]);
   });
 
-  it('names only icon files every build ships', () => {
+  it('names only icon files every build ships, and those only later builds draw in 4.2.2', () => {
     const missing: string[] = [];
     for (const [build, one] of read) {
       for (const [screen, meaning] of Object.entries(SCREEN_MEANINGS)) {
-        for (const file of iconsIn(meaning)) {
+        const later = build === LATER ? iconsIn({ dialog: '', ...meaning.later }) : [];
+        for (const file of [...iconsIn(meaning), ...later]) {
           if (!one.files.has(`ui/icons/${file}`.toLowerCase())) {
             missing.push(`${build} ${screen}: ${file}`);
           }
@@ -987,15 +1016,36 @@ describe.skipIf(!BUILDS.size)('the HUD frames, against the player’s builds', (
     return frame.filter(part => part !== ring && !meters.includes(part));
   };
 
-  it('frames the hero on the art the movie lays behind the ring', () => {
-    const drawn = [...read.values()].some(one => {
-      const spec = one.built.spec.screens.playerFrame!;
-      const parts = partsOf(one, SCREEN_MEANINGS.playerFrame!)!;
-      return backing(spec).some(name =>
-        parts.some(part => part.path === name && part.draws && part.box.w > 0),
-      );
-    });
-    expect(drawn).toBe(true);
+  /**
+   * Whether the build lays any art behind the ring. 4.2.2 places the part
+   * as a clip with nothing in it, at every face, and frames the hero on
+   * the ring alone.
+   */
+  const backed = (one: Read): boolean => {
+    const spec = one.built.spec.screens.playerFrame!;
+    const parts = partsOf(one, SCREEN_MEANINGS.playerFrame!)!;
+    return backing(spec).some(name =>
+      parts.some(part => part.path === name && part.draws && part.box.w > 0),
+    );
+  };
+
+  it.skipIf(!TARGET)('frames the hero on the art the movie lays behind the ring', () => {
+    expect(backed(read.get(TARGET!)!)).toBe(true);
+  });
+
+  it.skipIf(!LATER)('frames the hero on the ring alone where the art behind it is empty', () => {
+    const one = read.get(LATER!)!;
+    const skin = one.movies.get('IGM')!;
+    const spec = one.built.spec.screens.playerFrame!;
+    const sprites = new Map(skin.sprites.map(sprite => [sprite.id, sprite]));
+    for (const name of backing(spec)) {
+      const placed = skin.sprites
+        .flatMap(sprite => sprite.frames[0] ?? [])
+        .find(one => one.name === name);
+      const clip = sprites.get(placed?.characterId ?? -1);
+      expect(clip?.frames.flat(), name).toEqual([]);
+    }
+    expect(backed(one)).toBe(false);
   });
 
   it('finds a cast bar on the target frame of every build, as a clip of faces', () => {
@@ -1041,6 +1091,7 @@ describe.skipIf(!BUILDS.size)('the HUD frames, against the player’s builds', (
     };
     let ornamented = 0;
     for (const [build, one] of read) {
+      if (!backed(one)) continue;
       const skin = one.movies.get('IGM')!;
       const spec = one.built.spec.screens.playerFrame!;
       const parts = partsOf(one, SCREEN_MEANINGS.playerFrame!)!;
@@ -1071,7 +1122,7 @@ describe.skipIf(!BUILDS.size)('the HUD frames, against the player’s builds', (
         ).toEqual([]);
       }
     }
-    expect(ornamented).toBeGreaterThan(0);
+    if ([...read.values()].some(backed)) expect(ornamented).toBeGreaterThan(0);
   });
 
   it('climbs a clip the movie carries, and lights pips it carries, for either length of meter', () => {

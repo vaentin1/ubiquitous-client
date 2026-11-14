@@ -21,27 +21,37 @@ export interface UiSpriteSpec {
   movie: UiMovie;
   /** Instance name of a placement in the movie that draws the sprite. */
   instance: string;
-  /** The sheet the sprite is cut from; an instance filled from any other is not it. */
+  /**
+   * The sheet the sprite is cut from, or the sheets builds differ on; an
+   * instance filled from any other is not it.
+   */
+  sheet: string | readonly string[];
+}
+
+/** A sprite's rect, and the sheet it is on. */
+export interface SpriteFound extends SpriteRect {
   sheet: string;
 }
 
 /* Sprites are located through the build's own movie, which differ, never hard-coded. */
 const ICONS = 'zhanshi.png';
 const BANNER = 'UI_store_banner.png';
+/** Where 4.2.2 keeps its gold coin and its stick's knob. */
+const SPELLS = 'UI_spells.png';
 
 const on =
-  (sheet: string) =>
+  (sheet: string | readonly string[]) =>
   (instance: string): UiSpriteSpec => ({ movie: 'IGM', instance, sheet });
 const icon = on(ICONS);
 const banner = on(BANNER);
 
 export const UI_SPRITES = {
-  'coin-gold': icon('iconGold'),
+  'coin-gold': on([ICONS, SPELLS])('iconGold'),
   'coin-silver': icon('iconSilver'),
   'coin-copper': icon('iconcopper'),
   'button-fill-light': banner('btnJoinQueue'),
   'stick-ring': icon('touchpadbak'),
-  'stick-knob': icon('btnstick'),
+  'stick-knob': on([ICONS, SPELLS])('btnstick'),
 } as const satisfies Record<string, UiSpriteSpec>;
 
 export type UiSpriteName = keyof typeof UI_SPRITES;
@@ -108,13 +118,18 @@ function inside(rect: SpriteRect, image: ImageBitmap): boolean {
 const FILL_UNITS_PER_PIXEL = 20;
 
 /** A sprite's rect on its sheet, from the first placement filling it: the shape's bounds back through the fill matrix. */
-export function locateSprite(movie: UiSkinData, spec: UiSpriteSpec): SpriteRect | null {
+export function locateSprite(movie: UiSkinData, spec: UiSpriteSpec): SpriteFound | null {
   const shapes = new Map(movie.shapes.map(shape => [shape.id, shape]));
   const sprites = new Map(movie.sprites.map(sprite => [sprite.id, sprite]));
+  const sheets: readonly string[] = typeof spec.sheet === 'string' ? [spec.sheet] : spec.sheet;
   const fromSheet = (fill: UiSkinFill): fill is Extract<UiSkinFill, { kind: 'bitmap' }> =>
-    fill.kind === 'bitmap' && fill.art === spec.sheet && fill.matrix.a > 0 && fill.matrix.d > 0;
+    fill.kind === 'bitmap' &&
+    fill.art !== null &&
+    sheets.includes(fill.art) &&
+    fill.matrix.a > 0 &&
+    fill.matrix.d > 0;
 
-  const find = (characterId: number, depth: number): SpriteRect | null => {
+  const find = (characterId: number, depth: number): SpriteFound | null => {
     const shape = shapes.get(characterId);
     if (shape) {
       const fill = shape.fills.find(fromSheet);
@@ -122,6 +137,7 @@ export function locateSprite(movie: UiSkinData, spec: UiSpriteSpec): SpriteRect 
       const kx = FILL_UNITS_PER_PIXEL / fill.matrix.a;
       const ky = FILL_UNITS_PER_PIXEL / fill.matrix.d;
       return {
+        sheet: fill.art!,
         x: Math.round((shape.bounds.x - fill.matrix.tx) * kx),
         y: Math.round((shape.bounds.y - fill.matrix.ty) * ky),
         w: Math.round(shape.bounds.w * kx),
@@ -176,8 +192,8 @@ export async function cutUiSprites(
     const movie = await once(movies, spec.movie, () => readMovie(spec.movie));
     const placed = movie && locateSprite(movie, spec);
     if (!placed) continue;
-    const art = await once(sheets, `${spec.movie}/${spec.sheet}`, () =>
-      readSheet(spec.sheet, spec.movie),
+    const art = await once(sheets, `${spec.movie}/${placed.sheet}`, () =>
+      readSheet(placed.sheet, spec.movie),
     );
     if (!art) continue;
     const rect = rectOnCopy(placed, art.scale);

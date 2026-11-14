@@ -3341,7 +3341,7 @@ describe.skipIf(!RES)('the interface sprites, found in the user movie', () => {
       // may be absent from one, which then draws its plain fallback.
       if (!/^(menu|coin|stick)-/.test(name) && !rect) continue;
       expect(rect, name).not.toBeNull();
-      const bytes = await pack.read(`ui/${spec.movie}/${spec.sheet}`);
+      const bytes = await pack.read(`ui/${spec.movie}/${rect!.sheet}`);
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
       expect(view.getUint32(0)).toBe(0x89504e47);
       expect(view.getUint32(16), name).toBeGreaterThanOrEqual(rect!.x + rect!.w);
