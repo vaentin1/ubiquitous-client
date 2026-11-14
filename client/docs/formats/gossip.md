@@ -34,7 +34,9 @@ A tag opens with byte `0x12` and closes with byte `0x13`:
 The `>` character plays no part. `0x12 0x13` with nothing between is empty
 and means nothing. A few strings put words between `0x12` and `0x13` that are
 not a tag (they contain spaces); those are words. Line breaks are `\n`, and
-some 1.1.4 strings use `\r\n`.
+some 1.1.4 strings use `\r\n`. Four 4.2.2 pages write a second `0x12` inside
+a choice's tag, just before its `,icon=` (`0x12 link_menu=1 0x12 ,icon=… 0x13`);
+it is read as part of the tag.
 
 | Tag                                                             | Closed?    | Meaning                                                                                                                                                                                                                                                                                                                                                               |
 | --------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

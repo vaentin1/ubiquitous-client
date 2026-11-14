@@ -143,6 +143,15 @@ describe('reading a conversation page', () => {
     expect(page.choices.map(choice => choice.label)).toEqual(['Any news?']);
   });
 
+  it('reads a choice whose tag opens a second time before its icon', () => {
+    const page = readGossip(
+      menu(`Well?\x12link_menu=1\x12,icon=a.png\x13Yes.${close('link_menu')}`, [9, 0, 0, 0, 0, 0]),
+      player(),
+    );
+    expect(words(page)).toBe('Well?');
+    expect(page.choices.map(choice => [choice.label, choice.subMenuId])).toEqual([['Yes.', 9]]);
+  });
+
   it('drops a choice with no words, which has nothing to click', () => {
     const page = readGossip(menu(`Hello. ${link('1,', '')}`, [9, 0, 0, 0, 0, 0]), player());
     expect(page.choices).toEqual([]);

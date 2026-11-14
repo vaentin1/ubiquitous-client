@@ -135,7 +135,7 @@ function readAttrs(raw: string): { value: string; attrs: Map<string, string> } {
  * closed runs to the end. Anything between 0x12 and 0x13 that is not a tag
  * is words, and a stray 0x12 or 0x13 is dropped.
  */
-function parseMarkup(source: string): Node[] {
+function parseMarkup(raw: string): Node[] {
   const root: Tag = { kind: 'tag', name: '', value: '', attrs: new Map(), children: [] };
   const stack: Tag[] = [root];
   const add = (node: Node): void => {
@@ -146,6 +146,9 @@ function parseMarkup(source: string): Node[] {
     if (clean) add({ kind: 'text', text: clean });
   };
 
+  // A few 4.2.2 pages open a second 0x12 inside a tag, just before its
+  // `,icon=` attribute; it continues the tag rather than starting one.
+  const source = raw.replace(/(\x12[^\x12\x13]*)\x12(?=,)/g, '$1');
   const markup = /\x12([^\x12\x13]*)\x13/g;
   let at = 0;
   for (let match = markup.exec(source); match !== null; match = markup.exec(source)) {
