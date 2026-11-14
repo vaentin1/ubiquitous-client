@@ -3312,6 +3312,12 @@ describe.skipIf(!RES || !TABLES)('capes, on every body in every build', () => {
         return found ? tablesPack.read(found) : null;
       });
       const res = await PackReader.open(await fileSource(build.res), 'res.bin');
+      // 4.2.2 keeps the cape art in `res_t.bin`; the client looks in both.
+      const resTPath = join(dirname(build.res), 'res_t.bin');
+      const resT = existsSync(resTPath)
+        ? await PackReader.open(await fileSource(resTPath), 'res_t.bin')
+        : null;
+      const shipped = (name: string) => res.has(name) || (resT?.has(name) ?? false);
       const display = tables.keyedRows('itemdisplayinfo');
       const items = (id: number) => display.get(id);
       const backItems = [...tables.keyedRows('items').keys()].filter(
@@ -3351,7 +3357,7 @@ describe.skipIf(!RES || !TABLES)('capes, on every body in every build', () => {
           const worn = visible.filter(n => capes.includes(n));
           expect(worn, `${path} item ${id}`).toHaveLength(1);
           expect(visible, `${path} item ${id}`).not.toContain('cape_01-mesh');
-          expect(res.has(meshTextures[worn[0]]), `${path} item ${id} art`).toBe(true);
+          expect(shipped(meshTextures[worn[0]]), `${path} item ${id} art`).toBe(true);
         }
         for (const id of kinds.values()) {
           const look = lookFrom();
@@ -3396,10 +3402,10 @@ describe.skipIf(!RES || !TABLES)('capes, on every body in every build', () => {
 describe.skipIf(!RES)('scenery images, through the index models resolve by', () => {
   /**
    * A model keeps a material image only when the synchronous resolver finds
-   * it; one it misses is drawn white. 4.2.2 keeps nearly every scenery image
-   * in `res_t.bin`, so a resolver blind to that pack whitens its world.
+   * it; one it misses is drawn white. 4.2.2 keeps its building images in
+   * `res_t.bin`, so a resolver blind to that pack whitens its world.
    */
-  it('resolves nearly every image a sample of buildings names, each to a picture', async () => {
+  it("resolves every image a sample of 4.2.2's buildings names, each to a picture", async () => {
     const names = ['res.bin', 'res_t.bin'].filter(n => findPack(n));
     const files = await Promise.all(
       names.map(async n => new File([await openAsBlob(findPack(n)!)], n)),
@@ -3409,6 +3415,7 @@ describe.skipIf(!RES)('scenery images, through the index models resolve by', () 
     const resolves = (ref: string) => lib.resolveTextureSync(ref) !== null;
 
     const res = await lib.pack('res.bin');
+    if (res.length !== BUILD_422.resEntries) return;
     const buildings = res.entries
       .map(e => e.name)
       .filter(n => /^model\/scene\/build\/.+\.bdae$/i.test(n) && !/_inside\.bdae$/i.test(n));
@@ -3418,6 +3425,7 @@ describe.skipIf(!RES)('scenery images, through the index models resolve by', () 
     let named = 0;
     let resolved = 0;
     let textured = 0;
+    let inResT = 0;
     const found = new Set<string>();
     for (const path of sample) {
       const doc = await readBdae(lib, path);
@@ -3426,15 +3434,17 @@ describe.skipIf(!RES)('scenery images, through the index models resolve by', () 
         named++;
         if (!resolves(group.texture)) continue;
         resolved++;
+        if (lib.resolveTextureSync(group.texture)?.[0] === 'res_t.bin') inResT++;
         found.add(group.texture);
       }
-      // What the renderer is handed: a resolved name survives into the model.
       const kept = toModelData(doc, path, resolves).meshes.flatMap(m => m.groups);
       if (kept.some(g => g.texture)) textured++;
     }
-    // 4.2.2 measured: 138 of 138 names resolve, and every sampled building keeps one.
-    expect(resolved).toBeGreaterThanOrEqual(named * 0.95);
-    expect(textured).toBeGreaterThanOrEqual(sample.length * 0.9);
+    // Measured on 4.2.2: 138 names, every one found, every one in `res_t.bin`.
+    expect(named).toBeGreaterThan(100);
+    expect(resolved).toBe(named);
+    expect(inResT).toBe(named);
+    expect(textured).toBe(sample.length);
     for (const ref of found) {
       const { bytes } = await lib.readTexture(ref);
       if (isPng(bytes)) continue;
